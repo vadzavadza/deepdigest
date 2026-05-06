@@ -805,7 +805,25 @@ function resetToLanding() {
 }
 
 // ── MOBILE MENU ──
-function toggleMenu() {
+// Show success after email verification
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('verified') === 'true') {
+    document.body.insertAdjacentHTML('beforeend', `
+        <div id="verifyToast" style="position:fixed;bottom:32px;left:50%;transform:translateX(-50%);
+            background:#5A9E6F;color:#fff;padding:16px 28px;border-radius:12px;
+            font-size:15px;font-weight:600;z-index:9999;box-shadow:0 8px 30px rgba(0,0,0,.4);
+            display:flex;align-items:center;gap:10px;white-space:nowrap">
+            ✅ Email confirmed! Welcome to DeepDigest.
+        </div>
+    `);
+    setTimeout(() => openModal('login'), 1500);
+    setTimeout(() => {
+        const t = document.getElementById('verifyToast');
+        if (t) { t.style.transition='opacity .5s'; t.style.opacity='0'; setTimeout(()=>t.remove(),500); }
+    }, 4000);
+}
+if (urlParams.get('verified') === 'already') { openModal('login'); }
+
   document.getElementById('mobileMenu').classList.toggle('open');
   document.getElementById('hamburger').classList.toggle('open');
 }

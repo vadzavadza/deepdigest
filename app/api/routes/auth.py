@@ -45,26 +45,31 @@ async def register(
     return {"message": "Account created! Check your email to confirm."}
 
 
-@router.get("/verify", response_model=MessageResponse)
+@router.get("/verify")
 async def verify_email(token: str, background: BackgroundTasks, db: AsyncSession = Depends(get_db)):
-    payload = decode_token(token)
+    from fastapi.responses import RedirectResponse
+    try:
+        payload = decode_token(token)
+    except Exception:
+        return RedirectResponse(f"{settings.FRONTEND_URL}/?error=invalid_token")
+
     if payload.get("type") != "verify":
-        raise HTTPException(status_code=400, detail="Invalid token type")
+        return RedirectResponse(f"{settings.FRONTEND_URL}/?error=invalid_token")
 
     email = payload.get("sub")
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return RedirectResponse(f"{settings.FRONTEND_URL}/?error=not_found")
     if user.is_verified:
-        return {"message": "Email already verified"}
+        return RedirectResponse(f"{settings.FRONTEND_URL}/?verified=already")
 
     user.is_verified = True
     background.add_task(send_welcome_email, email)
     if user.telegram_chat_id:
         background.add_task(notify_new_user, user.telegram_chat_id)
 
-    return {"message": "Email confirmed! Welcome to DeepDigest."}
+    return RedirectResponse(f"{settings.FRONTEND_URL}/?verified=true")
 
 
 @router.post("/login", response_model=TokenResponse)
