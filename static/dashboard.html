@@ -551,8 +551,8 @@ body {
 
 <script>
 // AUTH CHECK
-const token = localStorage.getItem('access_token');
-const email = localStorage.getItem('user_email');
+const token = localStorage.getItem('dd_token');
+const email = localStorage.getItem('li_email') || '';
 
 if (!token) {
   window.location.href = '/';
