@@ -41,5 +41,9 @@ from fastapi.responses import FileResponse
 @app.get("/dashboard")
 async def dashboard():
     return FileResponse("static/dashboard.html")
+
+@app.get("/reset-password")
+async def reset_password_page():
+    return FileResponse("static/reset-password.html")
     
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
