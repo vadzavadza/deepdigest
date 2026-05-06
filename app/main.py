@@ -36,4 +36,10 @@ app.include_router(users.router,  prefix="/api/users",  tags=["users"])
 app.include_router(digest.router, prefix="/api/digest", tags=["digest"])
 
 # Serve landing page static files
+from fastapi.responses import FileResponse
+
+@app.get("/dashboard")
+async def dashboard():
+    return FileResponse("static/dashboard.html")
+    
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
