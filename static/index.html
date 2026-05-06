@@ -502,7 +502,7 @@ footer{background:#0A0908;border-top:1px solid var(--border);padding:64px 48px 3
         </div>
         <div class="field-error" id="li_err" data-i="err_combo">Incorrect email or password.</div>
       </div>
-      <div style="text-align:right;margin-top:-6px"><a href="#" style="font-size:12px;color:var(--text3);text-decoration:underline;text-underline-offset:2px" data-i="forgot_pw">Forgot password?</a></div>
+      <div style="text-align:right;margin-top:-6px"><a href="#" onclick="showForgot();return false;" style="font-size:12px;color:var(--text3);text-decoration:underline;text-underline-offset:2px" data-i="forgot_pw">Forgot password?</a></div>
       <button class="modal-submit" id="btnLogin" onclick="submitLogin()">
         <span id="btnLoginTxt" data-i="btn_login">Log in</span>
         <div class="btn-spinner" id="spinnerLogin"></div>
@@ -514,10 +514,36 @@ footer{background:#0A0908;border-top:1px solid var(--border);padding:64px 48px 3
       </button>
       <p class="modal-note" style="margin-top:8px"><span data-i="no_account">Don't have an account?</span> <a href="#" onclick="switchTab('signup');return false" data-i="sign_up_link">Sign up free →</a></p>
     </div>
+    <!-- FORGOT PASSWORD -->
+    <div id="formForgot" class="modal-form" style="display:none">
+      <div style="margin-bottom:4px">
+        <button onclick="showLogin();return false;" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0;display:flex;align-items:center;gap:6px;font-family:inherit;margin-bottom:16px">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 5-7 7 7 7"/></svg>
+          Back to login
+        </button>
+        <div style="font-size:18px;font-weight:600;margin-bottom:6px">Reset password</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Enter your email and we'll send you a reset link.</div>
+      </div>
+      <div>
+        <label class="field-label">Email</label>
+        <input class="field-input" id="fp_email" type="email" placeholder="you@example.com" autocomplete="email"
+          onkeydown="if(event.key==='Enter')submitForgot()"
+          oninput="document.getElementById('fp_err').classList.remove('show')"/>
+        <div class="field-error" id="fp_err">Please enter a valid email.</div>
+      </div>
+      <button class="modal-submit" id="btnForgot" onclick="submitForgot()">
+        <span id="btnForgotTxt">Send reset link</span>
+        <div class="btn-spinner" id="spinnerForgot"></div>
+      </button>
+      <!-- Success state -->
+      <div id="fp_success" style="display:none;text-align:center;padding:16px 0">
+        <div style="font-size:32px;margin-bottom:10px">📬</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">Check your inbox</div>
+        <div style="font-size:13px;color:var(--text2)">If that email exists, a reset link has been sent.</div>
+      </div>
+    </div>
   </div>
 </div>
-
-<!-- CONFIRM PAGE -->
 <div class="confirm-page" id="confirmPage">
   <div class="confirm-icon">📬</div>
   <h2 class="confirm-h serif" data-i="confirm_h">Check your <em>inbox</em></h2>
@@ -672,6 +698,11 @@ function openModal(tab) {
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
   document.body.style.overflow = '';
+  // Reset forgot password state
+  const forgotForm = document.getElementById('formForgot');
+  if (forgotForm) forgotForm.style.display = 'none';
+  const tabs = document.querySelector('.modal-tabs');
+  if (tabs) tabs.style.display = 'flex';
 }
 function handleOverlayClick(e) { if (e.target.id === 'modalOverlay') closeModal(); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
@@ -790,6 +821,50 @@ async function submitLogin() {
     showErr('li_email','li_err','Network error. Please try again.');
   } finally {
     setLoading('btnLogin','btnLoginTxt','spinnerLogin',false);
+  }
+}
+
+// ── FORGOT PASSWORD ──
+function showForgot() {
+  document.getElementById('formSignup').style.display = 'none';
+  document.getElementById('formLogin').style.display = 'none';
+  document.getElementById('formForgot').style.display = 'flex';
+  document.getElementById('fp_success').style.display = 'none';
+  document.getElementById('btnForgot').style.display = 'flex';
+  document.getElementById('fp_email').value = '';
+  // Hide tabs when in forgot mode
+  document.querySelector('.modal-tabs').style.display = 'none';
+  setTimeout(() => document.getElementById('fp_email').focus(), 100);
+}
+
+function showLogin() {
+  document.getElementById('formForgot').style.display = 'none';
+  document.querySelector('.modal-tabs').style.display = 'flex';
+  switchTab('login');
+}
+
+async function submitForgot() {
+  const email = document.getElementById('fp_email').value.trim();
+  if (!isEmail(email)) {
+    document.getElementById('fp_err').classList.add('show');
+    return;
+  }
+  setLoading('btnForgot', 'btnForgotTxt', 'spinnerForgot', true);
+  try {
+    await fetch(`${API}/api/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    // Always show success (API never reveals if email exists)
+    document.getElementById('btnForgot').style.display = 'none';
+    document.getElementById('fp_email').closest('div').style.display = 'none';
+    document.getElementById('fp_success').style.display = 'block';
+  } catch(e) {
+    document.getElementById('fp_err').textContent = 'Network error. Please try again.';
+    document.getElementById('fp_err').classList.add('show');
+  } finally {
+    setLoading('btnForgot', 'btnForgotTxt', 'spinnerForgot', false);
   }
 }
 
