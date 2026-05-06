@@ -47,6 +47,14 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     language: Optional[str] = None
     telegram_chat_id: Optional[str] = None
+    password: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
 
 
 class PasswordResetRequest(BaseModel):

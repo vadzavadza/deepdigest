@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import UserOut, UserUpdate
 from app.api.deps import get_current_user, get_verified_user
+from app.core.security import hash_password
 
 router = APIRouter()
 
@@ -20,7 +21,10 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    for field, value in body.model_dump(exclude_none=True).items():
+    data = body.model_dump(exclude_none=True)
+    if "password" in data:
+        user.hashed_password = hash_password(data.pop("password"))
+    for field, value in data.items():
         setattr(user, field, value)
     return user
 

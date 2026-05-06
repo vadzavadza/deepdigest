@@ -783,8 +783,9 @@ async function submitLogin() {
       return;
     }
     localStorage.setItem('dd_token', data.access_token);
+    localStorage.setItem('dd_email', email.trim());
     closeModal();
-    window.location.href = '/dashboard';  // TODO: create dashboard page
+    window.location.href = '/dashboard';
   } catch(e) {
     showErr('li_email','li_err','Network error. Please try again.');
   } finally {
