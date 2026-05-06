@@ -15,7 +15,7 @@ def _send(to: str, subject: str, html: str) -> None:
 
 
 def send_verification_email(to: str, token: str) -> None:
-    link = f"{settings.FRONTEND_URL}/verify?token={token}"
+    link = f"{settings.FRONTEND_URL}/api/auth/verify?token={token}"
     html = f"""
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:40px 24px">
       <h2 style="font-size:24px;font-weight:700;margin-bottom:8px">Confirm your email</h2>
