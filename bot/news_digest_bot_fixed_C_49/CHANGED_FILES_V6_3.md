@@ -1,0 +1,4 @@
+- app/infrastructure/sources/openrouter_web_search.py
+- app/shared/settings.py
+- docker-compose.yml
+- .env.example

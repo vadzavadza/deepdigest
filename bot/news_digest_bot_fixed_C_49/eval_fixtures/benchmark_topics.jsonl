@@ -1,0 +1,16 @@
+{"topic":"Real Madrid","expected_kind":"sports_team","acceptable":"matches, transfers, injuries, coach/manager, LaLiga/Champions League","bad":"old rumors, random fan pages, unrelated Madrid city news"}
+{"topic":"Barcelona FC","expected_kind":"sports_team","acceptable":"matches, transfers, injuries, coach/manager, LaLiga/Champions League","bad":"Barcelona city travel/local news"}
+{"topic":"Lexus","expected_kind":"brand_company","acceptable":"recalls, safety notices, production, model launches, business/earnings","bad":"week-long reviews, buyer guides, price pages"}
+{"topic":"Audi","expected_kind":"brand_company","acceptable":"recalls, production, launches, business, safety","bad":"buyer guides, dealership pages, old reviews"}
+{"topic":"Dyson","expected_kind":"brand_company","acceptable":"product launches, company news, lawsuits, recalls, business","bad":"shopping pages, coupon pages, how-to guides"}
+{"topic":"Universal Pictures","expected_kind":"entertainment_company","acceptable":"release slate, box office, studio deals, lawsuits, production news","bad":"generic biographies, weak aggregators, old movie pages"}
+{"topic":"Leonardo DiCaprio","expected_kind":"person","acceptable":"recent interviews, projects, legal/public statements, appearances","bad":"evergreen biography, old movie rankings"}
+{"topic":"Pavel Durov","expected_kind":"person","acceptable":"Telegram-related statements, legal/political news, company updates","bad":"generic Telegram tutorials"}
+{"topic":"Kyiv","expected_kind":"city","acceptable":"current city-specific events in Kyiv/Kyiv region","bad":"generic Ukraine news with no Kyiv angle"}
+{"topic":"Lviv","expected_kind":"city","acceptable":"current city/regional events in Lviv/Lviv oblast","bad":"generic Ukraine news with no Lviv angle"}
+{"topic":"Paris","expected_kind":"city","acceptable":"Paris city news, governance, transport, incidents, major events","bad":"Paris Hilton, Paris Texas, evergreen travel guides"}
+{"topic":"bitcoin","expected_kind":"crypto","acceptable":"market-moving BTC news, regulation, ETF, mining, security, major business moves","bad":"price pages, generic quote pages, evergreen explainers"}
+{"topic":"Ethereum","expected_kind":"crypto","acceptable":"ETH regulation, protocol, market, ETF, security, ecosystem news","bad":"generic price pages or old explainers"}
+{"topic":"Microsoft","expected_kind":"brand_company","acceptable":"earnings, AI/product launches, regulation, layoffs, deals, security","bad":"Microsoft News hub pages, how-to Windows tutorials"}
+{"topic":"NAVI TEAM","expected_kind":"team_org","acceptable":"esports roster, tournament, match, organization news","bad":"generic team building, unrelated sports teams"}
+{"topic":"CS","expected_kind":"ambiguous_acronym","acceptable":"should ask/require context or select Counter-Strike only with CS2/esports context","bad":"computer science/Twin Cities/customer success mixed into digest"}

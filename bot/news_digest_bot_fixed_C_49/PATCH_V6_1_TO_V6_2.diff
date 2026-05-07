@@ -1,0 +1,1052 @@
+diff -ruN v62base/ADDED_FILES_V6_2.md v62work/ADDED_FILES_V6_2.md
+--- v62base/ADDED_FILES_V6_2.md	1970-01-01 00:00:00.000000000 +0000
++++ v62work/ADDED_FILES_V6_2.md	2026-04-27 10:35:11.633192976 +0000
+@@ -0,0 +1,10 @@
++QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
++START_HERE_V6_2_RU.md
++TEST_REPORT_V6_2.md
++PATCH_V6_1_TO_V6_2.diff
++MANIFEST_V6_1_BEFORE_V6_2.txt
++MANIFEST_V6_2_AFTER.txt
++CHANGED_FILES_V6_2.md
++ADDED_FILES_V6_2.md
++REMOVED_FILES_V6_2.md
++tests/test_quality_engine_v62.py
+diff -ruN v62base/CHANGED_FILES_V6_2.md v62work/CHANGED_FILES_V6_2.md
+--- v62base/CHANGED_FILES_V6_2.md	1970-01-01 00:00:00.000000000 +0000
++++ v62work/CHANGED_FILES_V6_2.md	2026-04-27 10:35:11.546004242 +0000
+@@ -0,0 +1,6 @@
++app/search_v2/strategy.py
++app/search_v2/article_filter.py
++app/search_v2/core.py
++app/domain/policies/ranking.py
++app/infrastructure/sources/openrouter_web_search.py
++app/application/services/topic_processing.py
+diff -ruN v62base/MANIFEST_V6_1_BEFORE_V6_2.txt v62work/MANIFEST_V6_1_BEFORE_V6_2.txt
+--- v62base/MANIFEST_V6_1_BEFORE_V6_2.txt	1970-01-01 00:00:00.000000000 +0000
++++ v62work/MANIFEST_V6_1_BEFORE_V6_2.txt	2026-04-27 10:35:20.738120406 +0000
+@@ -0,0 +1,161 @@
++.env.example
++ADDED_FILES_V5_2.md
++ADDED_FILES_V5_3.md
++ADDED_FILES_V5_4.md
++ADDED_FILES_V6.md
++ADDED_FILES_V6_1.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++CHANGED_FILES_V5_3.md
++CHANGED_FILES_V5_4.md
++CHANGED_FILES_V6.md
++CHANGED_FILES_V6_1.md
++DEBUG_GUIDE_V6_RU.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_2_BEFORE_V5_3.txt
++MANIFEST_V5_3_AFTER.txt
++MANIFEST_V5_3_BEFORE_V5_4.txt
++MANIFEST_V5_4_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++MANIFEST_V6_1_AFTER.txt
++MANIFEST_V6_AFTER.txt
++MANIFEST_V6_BEFORE.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_2_TO_V5_3.diff
++PATCH_V5_3_TO_V5_4.diff
++PATCH_V5_4_TO_V6.diff
++PATCH_V5_TO_V5_1.diff
++PATCH_V6_TO_V6_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++QUALITY_ENGINE_V6_1_SELECTION_RU.md
++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++REMOVED_FILES_V5_3.md
++REMOVED_FILES_V5_4.md
++REMOVED_FILES_V6.md
++REMOVED_FILES_V6_1.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++START_HERE_V5_3_RU.md
++START_HERE_V5_4_RU.md
++START_HERE_V6_1_RU.md
++START_HERE_V6_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++TEST_REPORT_V5_3.md
++TEST_REPORT_V5_4.md
++TEST_REPORT_V6.md
++TEST_REPORT_V6_1.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/core.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_engine_v53.py
++tests/test_quality_engine_v54.py
++tests/test_quality_engine_v6.py
++tests/test_quality_engine_v61.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff -ruN v62base/MANIFEST_V6_2_AFTER.txt v62work/MANIFEST_V6_2_AFTER.txt
+--- v62base/MANIFEST_V6_2_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
++++ v62work/MANIFEST_V6_2_AFTER.txt	2026-04-27 10:35:20.933129047 +0000
+@@ -0,0 +1,171 @@
++.env.example
++ADDED_FILES_V5_2.md
++ADDED_FILES_V5_3.md
++ADDED_FILES_V5_4.md
++ADDED_FILES_V6.md
++ADDED_FILES_V6_1.md
++ADDED_FILES_V6_2.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++CHANGED_FILES_V5_3.md
++CHANGED_FILES_V5_4.md
++CHANGED_FILES_V6.md
++CHANGED_FILES_V6_1.md
++CHANGED_FILES_V6_2.md
++DEBUG_GUIDE_V6_RU.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_2_BEFORE_V5_3.txt
++MANIFEST_V5_3_AFTER.txt
++MANIFEST_V5_3_BEFORE_V5_4.txt
++MANIFEST_V5_4_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++MANIFEST_V6_1_AFTER.txt
++MANIFEST_V6_1_BEFORE_V6_2.txt
++MANIFEST_V6_2_AFTER.txt
++MANIFEST_V6_AFTER.txt
++MANIFEST_V6_BEFORE.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_2_TO_V5_3.diff
++PATCH_V5_3_TO_V5_4.diff
++PATCH_V5_4_TO_V6.diff
++PATCH_V5_TO_V5_1.diff
++PATCH_V6_1_TO_V6_2.diff
++PATCH_V6_TO_V6_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++QUALITY_ENGINE_V6_1_SELECTION_RU.md
++QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++REMOVED_FILES_V5_3.md
++REMOVED_FILES_V5_4.md
++REMOVED_FILES_V6.md
++REMOVED_FILES_V6_1.md
++REMOVED_FILES_V6_2.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++START_HERE_V5_3_RU.md
++START_HERE_V5_4_RU.md
++START_HERE_V6_1_RU.md
++START_HERE_V6_2_RU.md
++START_HERE_V6_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++TEST_REPORT_V5_3.md
++TEST_REPORT_V5_4.md
++TEST_REPORT_V6.md
++TEST_REPORT_V6_1.md
++TEST_REPORT_V6_2.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/core.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_engine_v53.py
++tests/test_quality_engine_v54.py
++tests/test_quality_engine_v6.py
++tests/test_quality_engine_v61.py
++tests/test_quality_engine_v62.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff -ruN v62base/PATCH_V6_1_TO_V6_2.diff v62work/PATCH_V6_1_TO_V6_2.diff
+--- v62base/PATCH_V6_1_TO_V6_2.diff	1970-01-01 00:00:00.000000000 +0000
++++ v62work/PATCH_V6_1_TO_V6_2.diff	2026-04-27 10:35:21.039986686 +0000
+@@ -0,0 +1,364 @@
++diff -ruN v62base/ADDED_FILES_V6_2.md v62work/ADDED_FILES_V6_2.md
++--- v62base/ADDED_FILES_V6_2.md	1970-01-01 00:00:00.000000000 +0000
+++++ v62work/ADDED_FILES_V6_2.md	2026-04-27 10:35:11.633192976 +0000
++@@ -0,0 +1,10 @@
+++QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
+++START_HERE_V6_2_RU.md
+++TEST_REPORT_V6_2.md
+++PATCH_V6_1_TO_V6_2.diff
+++MANIFEST_V6_1_BEFORE_V6_2.txt
+++MANIFEST_V6_2_AFTER.txt
+++CHANGED_FILES_V6_2.md
+++ADDED_FILES_V6_2.md
+++REMOVED_FILES_V6_2.md
+++tests/test_quality_engine_v62.py
++diff -ruN v62base/CHANGED_FILES_V6_2.md v62work/CHANGED_FILES_V6_2.md
++--- v62base/CHANGED_FILES_V6_2.md	1970-01-01 00:00:00.000000000 +0000
+++++ v62work/CHANGED_FILES_V6_2.md	2026-04-27 10:35:11.546004242 +0000
++@@ -0,0 +1,6 @@
+++app/search_v2/strategy.py
+++app/search_v2/article_filter.py
+++app/search_v2/core.py
+++app/domain/policies/ranking.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/application/services/topic_processing.py
++diff -ruN v62base/MANIFEST_V6_1_BEFORE_V6_2.txt v62work/MANIFEST_V6_1_BEFORE_V6_2.txt
++--- v62base/MANIFEST_V6_1_BEFORE_V6_2.txt	1970-01-01 00:00:00.000000000 +0000
+++++ v62work/MANIFEST_V6_1_BEFORE_V6_2.txt	2026-04-27 10:35:20.738120406 +0000
++@@ -0,0 +1,161 @@
+++.env.example
+++ADDED_FILES_V5_2.md
+++ADDED_FILES_V5_3.md
+++ADDED_FILES_V5_4.md
+++ADDED_FILES_V6.md
+++ADDED_FILES_V6_1.md
+++CHANGED_FILES.md
+++CHANGED_FILES_V5_1.md
+++CHANGED_FILES_V5_2.md
+++CHANGED_FILES_V5_3.md
+++CHANGED_FILES_V5_4.md
+++CHANGED_FILES_V6.md
+++CHANGED_FILES_V6_1.md
+++DEBUG_GUIDE_V6_RU.md
+++MANIFEST_AFTER.txt
+++MANIFEST_BEFORE.txt
+++MANIFEST_V5_1_AFTER.txt
+++MANIFEST_V5_1_BEFORE_V5_2.txt
+++MANIFEST_V5_2_AFTER.txt
+++MANIFEST_V5_2_BEFORE_V5_3.txt
+++MANIFEST_V5_3_AFTER.txt
+++MANIFEST_V5_3_BEFORE_V5_4.txt
+++MANIFEST_V5_4_AFTER.txt
+++MANIFEST_V5_BEFORE_V51.txt
+++MANIFEST_V6_1_AFTER.txt
+++MANIFEST_V6_AFTER.txt
+++MANIFEST_V6_BEFORE.txt
+++PATCH.diff
+++PATCH_V5_1_TO_V5_2.diff
+++PATCH_V5_2_TO_V5_3.diff
+++PATCH_V5_3_TO_V5_4.diff
+++PATCH_V5_4_TO_V6.diff
+++PATCH_V5_TO_V5_1.diff
+++PATCH_V6_TO_V6_1.diff
+++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+++QUALITY_ENGINE_V5_2_BALANCE_RU.md
+++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
+++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
+++QUALITY_ENGINE_V6_1_SELECTION_RU.md
+++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
+++README.md
+++REMOVED_FILES.md
+++REMOVED_FILES_V5_1.md
+++REMOVED_FILES_V5_2.md
+++REMOVED_FILES_V5_3.md
+++REMOVED_FILES_V5_4.md
+++REMOVED_FILES_V6.md
+++REMOVED_FILES_V6_1.md
+++START_HERE_RU.md
+++START_HERE_V5_2_RU.md
+++START_HERE_V5_3_RU.md
+++START_HERE_V5_4_RU.md
+++START_HERE_V6_1_RU.md
+++START_HERE_V6_RU.md
+++TECHNICAL_DECISIONS.md
+++TEST_REPORT.md
+++TEST_REPORT_V5_1.md
+++TEST_REPORT_V5_2.md
+++TEST_REPORT_V5_3.md
+++TEST_REPORT_V5_4.md
+++TEST_REPORT_V6.md
+++TEST_REPORT_V6_1.md
+++app/__init__.py
+++app/api/__init__.py
+++app/api/routes/__init__.py
+++app/api/routes/internal.py
+++app/api/routes/telegram.py
+++app/application/__init__.py
+++app/application/services/__init__.py
+++app/application/services/deduplication.py
+++app/application/services/source_collection.py
+++app/application/services/topic_processing.py
+++app/bot/__init__.py
+++app/bot/application.py
+++app/bot/handlers/__init__.py
+++app/bot/handlers/callbacks.py
+++app/bot/handlers/channels.py
+++app/bot/handlers/start.py
+++app/bot/handlers/topic_creation.py
+++app/bot/handlers/topics_list.py
+++app/bot/keyboards/__init__.py
+++app/bot/keyboards/channels.py
+++app/bot/keyboards/main_menu.py
+++app/bot/keyboards/topic_creation.py
+++app/bot/keyboards/topic_details.py
+++app/bot/keyboards/topics_list.py
+++app/domain/__init__.py
+++app/domain/enums.py
+++app/domain/policies/__init__.py
+++app/domain/policies/normalization.py
+++app/domain/policies/ranking.py
+++app/domain/value_objects.py
+++app/infrastructure/__init__.py
+++app/infrastructure/db/__init__.py
+++app/infrastructure/db/base.py
+++app/infrastructure/db/models.py
+++app/infrastructure/db/session.py
+++app/infrastructure/llm/__init__.py
+++app/infrastructure/llm/base.py
+++app/infrastructure/llm/openrouter.py
+++app/infrastructure/providers/__init__.py
+++app/infrastructure/providers/news/__init__.py
+++app/infrastructure/providers/news/base.py
+++app/infrastructure/providers/news/factory.py
+++app/infrastructure/providers/news/mock.py
+++app/infrastructure/repositories/__init__.py
+++app/infrastructure/repositories/channels.py
+++app/infrastructure/repositories/job_runs.py
+++app/infrastructure/repositories/sent_stories.py
+++app/infrastructure/repositories/stories.py
+++app/infrastructure/repositories/topics.py
+++app/infrastructure/repositories/users.py
+++app/infrastructure/scheduler/__init__.py
+++app/infrastructure/scheduler/service.py
+++app/infrastructure/sources/__init__.py
+++app/infrastructure/sources/base.py
+++app/infrastructure/sources/factory.py
+++app/infrastructure/sources/mock.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/infrastructure/sources/registry.py
+++app/infrastructure/sources/rss.py
+++app/infrastructure/sources/telegram_channel.py
+++app/infrastructure/telegram/__init__.py
+++app/infrastructure/telegram/callbacks.py
+++app/infrastructure/telegram/publisher.py
+++app/infrastructure/telegram/service_messages.py
+++app/main.py
+++app/scheduler_runner.py
+++app/schemas/__init__.py
+++app/schemas/articles.py
+++app/schemas/discovery.py
+++app/schemas/llm.py
+++app/schemas/publishing.py
+++app/schemas/sources.py
+++app/schemas/topics.py
+++app/search_v2/__init__.py
+++app/search_v2/article_filter.py
+++app/search_v2/core.py
+++app/search_v2/strategy.py
+++app/shared/__init__.py
+++app/shared/logging.py
+++app/shared/settings.py
+++docker-compose.yml
+++docker/app/Dockerfile
+++pyproject.toml
+++tests/conftest.py
+++tests/test_deduplication.py
+++tests/test_disambiguation_diversity.py
+++tests/test_freshness_guard_v51.py
+++tests/test_normalization.py
+++tests/test_quality_engine_v5.py
+++tests/test_quality_engine_v52.py
+++tests/test_quality_engine_v53.py
+++tests/test_quality_engine_v54.py
+++tests/test_quality_engine_v6.py
+++tests/test_quality_engine_v61.py
+++tests/test_quality_filters.py
+++tests/test_ranking.py
+++tests/test_search_v2.py
+++tests/test_source_collection.py
++diff -ruN v62base/MANIFEST_V6_2_AFTER.txt v62work/MANIFEST_V6_2_AFTER.txt
++--- v62base/MANIFEST_V6_2_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
+++++ v62work/MANIFEST_V6_2_AFTER.txt	2026-04-27 10:35:20.933129047 +0000
++@@ -0,0 +1,171 @@
+++.env.example
+++ADDED_FILES_V5_2.md
+++ADDED_FILES_V5_3.md
+++ADDED_FILES_V5_4.md
+++ADDED_FILES_V6.md
+++ADDED_FILES_V6_1.md
+++ADDED_FILES_V6_2.md
+++CHANGED_FILES.md
+++CHANGED_FILES_V5_1.md
+++CHANGED_FILES_V5_2.md
+++CHANGED_FILES_V5_3.md
+++CHANGED_FILES_V5_4.md
+++CHANGED_FILES_V6.md
+++CHANGED_FILES_V6_1.md
+++CHANGED_FILES_V6_2.md
+++DEBUG_GUIDE_V6_RU.md
+++MANIFEST_AFTER.txt
+++MANIFEST_BEFORE.txt
+++MANIFEST_V5_1_AFTER.txt
+++MANIFEST_V5_1_BEFORE_V5_2.txt
+++MANIFEST_V5_2_AFTER.txt
+++MANIFEST_V5_2_BEFORE_V5_3.txt
+++MANIFEST_V5_3_AFTER.txt
+++MANIFEST_V5_3_BEFORE_V5_4.txt
+++MANIFEST_V5_4_AFTER.txt
+++MANIFEST_V5_BEFORE_V51.txt
+++MANIFEST_V6_1_AFTER.txt
+++MANIFEST_V6_1_BEFORE_V6_2.txt
+++MANIFEST_V6_2_AFTER.txt
+++MANIFEST_V6_AFTER.txt
+++MANIFEST_V6_BEFORE.txt
+++PATCH.diff
+++PATCH_V5_1_TO_V5_2.diff
+++PATCH_V5_2_TO_V5_3.diff
+++PATCH_V5_3_TO_V5_4.diff
+++PATCH_V5_4_TO_V6.diff
+++PATCH_V5_TO_V5_1.diff
+++PATCH_V6_1_TO_V6_2.diff
+++PATCH_V6_TO_V6_1.diff
+++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+++QUALITY_ENGINE_V5_2_BALANCE_RU.md
+++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
+++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
+++QUALITY_ENGINE_V6_1_SELECTION_RU.md
+++QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
+++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
+++README.md
+++REMOVED_FILES.md
+++REMOVED_FILES_V5_1.md
+++REMOVED_FILES_V5_2.md
+++REMOVED_FILES_V5_3.md
+++REMOVED_FILES_V5_4.md
+++REMOVED_FILES_V6.md
+++REMOVED_FILES_V6_1.md
+++REMOVED_FILES_V6_2.md
+++START_HERE_RU.md
+++START_HERE_V5_2_RU.md
+++START_HERE_V5_3_RU.md
+++START_HERE_V5_4_RU.md
+++START_HERE_V6_1_RU.md
+++START_HERE_V6_2_RU.md
+++START_HERE_V6_RU.md
+++TECHNICAL_DECISIONS.md
+++TEST_REPORT.md
+++TEST_REPORT_V5_1.md
+++TEST_REPORT_V5_2.md
+++TEST_REPORT_V5_3.md
+++TEST_REPORT_V5_4.md
+++TEST_REPORT_V6.md
+++TEST_REPORT_V6_1.md
+++TEST_REPORT_V6_2.md
+++app/__init__.py
+++app/api/__init__.py
+++app/api/routes/__init__.py
+++app/api/routes/internal.py
+++app/api/routes/telegram.py
+++app/application/__init__.py
+++app/application/services/__init__.py
+++app/application/services/deduplication.py
+++app/application/services/source_collection.py
+++app/application/services/topic_processing.py
+++app/bot/__init__.py
+++app/bot/application.py
+++app/bot/handlers/__init__.py
+++app/bot/handlers/callbacks.py
+++app/bot/handlers/channels.py
+++app/bot/handlers/start.py
+++app/bot/handlers/topic_creation.py
+++app/bot/handlers/topics_list.py
+++app/bot/keyboards/__init__.py
+++app/bot/keyboards/channels.py
+++app/bot/keyboards/main_menu.py
+++app/bot/keyboards/topic_creation.py
+++app/bot/keyboards/topic_details.py
+++app/bot/keyboards/topics_list.py
+++app/domain/__init__.py
+++app/domain/enums.py
+++app/domain/policies/__init__.py
+++app/domain/policies/normalization.py
+++app/domain/policies/ranking.py
+++app/domain/value_objects.py
+++app/infrastructure/__init__.py
+++app/infrastructure/db/__init__.py
+++app/infrastructure/db/base.py
+++app/infrastructure/db/models.py
+++app/infrastructure/db/session.py
+++app/infrastructure/llm/__init__.py
+++app/infrastructure/llm/base.py
+++app/infrastructure/llm/openrouter.py
+++app/infrastructure/providers/__init__.py
+++app/infrastructure/providers/news/__init__.py
+++app/infrastructure/providers/news/base.py
+++app/infrastructure/providers/news/factory.py
+++app/infrastructure/providers/news/mock.py
+++app/infrastructure/repositories/__init__.py
+++app/infrastructure/repositories/channels.py
+++app/infrastructure/repositories/job_runs.py
+++app/infrastructure/repositories/sent_stories.py
+++app/infrastructure/repositories/stories.py
+++app/infrastructure/repositories/topics.py
+++app/infrastructure/repositories/users.py
+++app/infrastructure/scheduler/__init__.py
+++app/infrastructure/scheduler/service.py
+++app/infrastructure/sources/__init__.py
+++app/infrastructure/sources/base.py
+++app/infrastructure/sources/factory.py
+++app/infrastructure/sources/mock.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/infrastructure/sources/registry.py
+++app/infrastructure/sources/rss.py
+++app/infrastructure/sources/telegram_channel.py
+++app/infrastructure/telegram/__init__.py
+++app/infrastructure/telegram/callbacks.py
+++app/infrastructure/telegram/publisher.py
+++app/infrastructure/telegram/service_messages.py
+++app/main.py
+++app/scheduler_runner.py
+++app/schemas/__init__.py
+++app/schemas/articles.py
+++app/schemas/discovery.py
+++app/schemas/llm.py
+++app/schemas/publishing.py
+++app/schemas/sources.py
+++app/schemas/topics.py
+++app/search_v2/__init__.py
+++app/search_v2/article_filter.py
+++app/search_v2/core.py
+++app/search_v2/strategy.py
+++app/shared/__init__.py
+++app/shared/logging.py
+++app/shared/settings.py
+++docker-compose.yml
+++docker/app/Dockerfile
+++pyproject.toml
+++tests/conftest.py
+++tests/test_deduplication.py
+++tests/test_disambiguation_diversity.py
+++tests/test_freshness_guard_v51.py
+++tests/test_normalization.py
+++tests/test_quality_engine_v5.py
+++tests/test_quality_engine_v52.py
+++tests/test_quality_engine_v53.py
+++tests/test_quality_engine_v54.py
+++tests/test_quality_engine_v6.py
+++tests/test_quality_engine_v61.py
+++tests/test_quality_engine_v62.py
+++tests/test_quality_filters.py
+++tests/test_ranking.py
+++tests/test_search_v2.py
+++tests/test_source_collection.py
+diff -ruN v62base/QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md v62work/QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
+--- v62base/QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ v62work/QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md	2026-04-27 10:35:11.735486191 +0000
+@@ -0,0 +1,37 @@
++# v6.2 Universal News Intelligence Layer
++
++Цель v6.2 — не подгонка под отдельные темы, а усиление универсального понимания типа новости.
++
++## Что изменено
++
++1. **Topic Classifier v2**
++   - `sports_team` — футбольные/спортивные клубы и команды;
++   - `brand_company` — бренды и компании;
++   - `entertainment_company` — киностудии, студии, медиакомпании;
++   - `ambiguous_acronym` — короткие неоднозначные темы вроде `CS`, `AI`, `X`.
++
++2. **Query Planner по vertical-типу**
++   - sports team: матчи, трансферы, травмы, тренер, лига;
++   - brand/company: recalls, product launch, earnings, production, regulation;
++   - entertainment company: film slate, releases, box office, production, lawsuits;
++   - ambiguous acronym: осторожные запросы, с требованием контекста.
++
++3. **Vertical Source Authority**
++   Источники теперь оцениваются не одной общей таблицей, а с поправкой на тип темы:
++   - спорт: спортивные источники получают бонус;
++   - авто/бренды: авто-источники получают бонус, review/guides понижаются;
++   - кино/студии: Variety/Deadline/THR/TheWrap выше слабых агрегаторов;
++   - crypto: CoinDesk/Cointelegraph/Decrypt/The Block/CryptoSlate выше биржевых/price pages.
++
++4. **Content Type Filter**
++   Review, buyer guide, “I drove...”, “for a week”, price pages и hub pages не должны проходить как ordinary latest news.
++
++5. **Ambiguous Acronym Handling**
++   `CS` больше не считается автоматически командой/организацией. Для Counter-Strike нужны контекстные сигналы: `CS2`, `Counter-Strike`, `esports`, `roster`, `tournament`, `BLAST`, `IEM`, `ESL`.
++
++## Что НЕ сделано
++
++- Не переписывал Telegram/БД/scheduler.
++- Не делал правила вида `if topic == Real Madrid`.
++- Живой OpenRouter/Telegram в этой среде не запускался.
++
+diff -ruN v62base/REMOVED_FILES_V6_2.md v62work/REMOVED_FILES_V6_2.md
+--- v62base/REMOVED_FILES_V6_2.md	1970-01-01 00:00:00.000000000 +0000
++++ v62work/REMOVED_FILES_V6_2.md	2026-04-27 10:35:11.650623675 +0000
+@@ -0,0 +1 @@
++No working files removed.
+diff -ruN v62base/START_HERE_V6_2_RU.md v62work/START_HERE_V6_2_RU.md
+--- v62base/START_HERE_V6_2_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ v62work/START_HERE_V6_2_RU.md	2026-04-27 10:35:11.750560864 +0000
+@@ -0,0 +1,42 @@
++# Как запускать v6.2
++
++1. Распакуй архив поверх отдельной папки проекта.
++2. Проверь `.env`:
++
++```env
++APP_DEBUG=true
++OPENROUTER_DEBUG_REJECTIONS=true
++OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
++```
++
++3. Запусти через Docker:
++
++```cmd
++docker compose up --build --force-recreate
++```
++
++Или с логом:
++
++```cmd
++powershell -Command "docker compose up --build --force-recreate 2>&1 | Tee-Object -FilePath debug_v6_2.log"
++```
++
++4. Тестовые классы тем:
++
++```text
++sports_team: Real Madrid, Arsenal, Bayern Munich
++brand_company: Lexus, Audi, Dyson, Microsoft
++entertainment_company: Universal Pictures, Disney, Netflix
++person: Leonardo DiCaprio, Pavel Durov
++city: Kyiv, Lviv, Paris
++crypto: bitcoin, Ethereum
++ambiguous_acronym: CS, AI, X
++```
++
++5. После теста вытащи диагностику:
++
++```cmd
++findstr /I "source_fetch_plan source_fetch_pass source_fetch_success source_fetch_empty candidate_decision candidate_rejected publish_done skipped topic_kind reason" debug_v6_2.log > search_debug_v6_2_only.txt
++```
++
+diff -ruN v62base/TEST_REPORT_V6_2.md v62work/TEST_REPORT_V6_2.md
+--- v62base/TEST_REPORT_V6_2.md	1970-01-01 00:00:00.000000000 +0000
++++ v62work/TEST_REPORT_V6_2.md	2026-04-27 10:35:11.833621985 +0000
+@@ -0,0 +1,15 @@
++# TEST_REPORT_V6_2
++
++Проверено в sandbox:
++
++- `py_compile` для изменённых файлов: PASS
++- deterministic checks для strategy/article_filter: PASS
++- zip integrity после сборки: PASS
++
++Полный живой тест OpenRouter/Telegram здесь не запускался, потому что нужны реальные ключи и окружение.
++
++Рекомендуемые локальные тесты:
++
++```cmd
++pytest -q tests/test_quality_engine_v6.py tests/test_quality_engine_v61.py tests/test_quality_engine_v62.py tests/test_ranking.py tests/test_search_v2.py tests/test_quality_filters.py
++```
+diff -ruN v62base/app/application/services/topic_processing.py v62work/app/application/services/topic_processing.py
+--- v62base/app/application/services/topic_processing.py	2026-04-26 20:34:54.000000000 +0000
++++ v62work/app/application/services/topic_processing.py	2026-04-27 10:30:58.329827410 +0000
+@@ -182,7 +182,7 @@
+ 
+                 if immediate_repeat:
+                     is_weak_candidate = primary.metadata.get("freshness_verified") is False
+-                    source_weight = source_quality_weight(primary.source_name)
++                    source_weight = source_quality_weight(primary.source_name, str(primary.metadata.get("topic_kind", "")))
+                     not_newer_than_last_digest = bool(
+                         last_sent_at and primary.published_at <= last_sent_at + timedelta(minutes=2)
+                     )
+@@ -194,7 +194,7 @@
+                             story_hash=story.story_hash,
+                             source_name=primary.source_name,
+                             source_weight=source_weight,
+-                            authority_tier=source_authority_tier(primary.source_name),
++                            authority_tier=source_authority_tier(primary.source_name, str(primary.metadata.get("topic_kind", ""))),
+                             freshness_verified=primary.metadata.get("freshness_verified"),
+                             published_at=primary.published_at.isoformat(),
+                             last_sent_at=last_sent_at.isoformat() if last_sent_at else None,
+diff -ruN v62base/app/domain/policies/ranking.py v62work/app/domain/policies/ranking.py
+--- v62base/app/domain/policies/ranking.py	2026-04-26 20:32:58.000000000 +0000
++++ v62work/app/domain/policies/ranking.py	2026-04-27 10:29:07.240003124 +0000
+@@ -71,78 +71,107 @@
+     return source_name.lower().replace('www.', '').strip()
+ 
+ 
+-def source_quality_weight(source_name: str) -> float:
++def _vertical_source_adjustment(normalized: str, topic_kind: str | None) -> float:
++    kind = (topic_kind or "").lower()
++    if kind in {"sports", "sports_team"}:
++        if any(x in normalized for x in ("espn", "theathletic", "the athletic", "skysports", "sky sports", "bbc sport", "marca", "as.com", "football-espana", "onefootball")):
++            return 14.0
++        if "fichajes" in normalized or "fourfourtwo" in normalized:
++            return 4.0
++    if kind in {"brand_company", "business"}:
++        if any(x in normalized for x in ("automotivenews", "automotive news", "carscoops", "motor1", "autoblog", "caranddriver", "topgear", "nhtsa", "carsguide")):
++            return 8.0
++        if any(x in normalized for x in ("tomsguide", "techradar")):
++            return -10.0
++    if kind == "entertainment_company":
++        if any(x in normalized for x in ("variety", "deadline", "hollywoodreporter", "hollywood reporter", "thewrap", "screendaily", "boxoffice")):
++            return 18.0
++        if "awardsradar" in normalized:
++            return 2.0
++        if "newsminimalist" in normalized:
++            return -14.0
++    if kind == "crypto":
++        if any(x in normalized for x in ("coindesk", "cointelegraph", "theblock", "decrypt", "cryptoslate")):
++            return 8.0
++        if any(x in normalized for x in ("weex", "coinmarketcap")):
++            return -16.0
++    return 0.0
++
++
++def source_quality_weight(source_name: str, topic_kind: str | None = None) -> float:
+     normalized = _normalize_source_name(source_name)
++    base: float
+     if normalized in _SOURCE_QUALITY:
+-        return _SOURCE_QUALITY[normalized]
+-    if 'youtube' in normalized or 'youtu.be' in normalized:
+-        return -120.0
+-    if 'wikipedia' in normalized or 'wikimedia' in normalized:
+-        return -120.0
+-    if 'iheart' in normalized or 'reddit' in normalized:
+-        return -90.0
+-    if 'reuters' in normalized:
+-        return 36.0
+-    if 'associated press' in normalized or normalized == 'ap' or 'apnews' in normalized:
+-        return 34.0
+-    if 'bloomberg' in normalized:
+-        return 22.0
+-    if 'ft.com' in normalized or 'financial times' in normalized:
+-        return 31.0
+-    if 'wsj' in normalized or 'wall street journal' in normalized:
+-        return 30.0
+-    if 'bbc' in normalized:
+-        return 28.0
+-    if 'dw.com' in normalized or normalized == 'dw':
+-        return 27.0
+-    if 'sky.com' in normalized or 'sky news' in normalized:
+-        return 24.0
+-    if 'guardian' in normalized:
+-        return 24.0
+-    if 'nytimes' in normalized or normalized == 'nyt':
+-        return 26.0
+-    if 'weex' in normalized:
+-        return -24.0
+-    if 'coinmarketcap' in normalized:
+-        return -10.0
+-    if 'cryptobriefing' in normalized or 'news.bitcoin' in normalized:
+-        return 6.0
+-    if 'carscoops' in normalized or 'autoblog' in normalized or 'motor1' in normalized:
+-        return 9.0
+-    if 'newsminimalist' in normalized:
+-        return -8.0
+-    if 'tourprom' in normalized or 'eadaily' in normalized or 'kp.ru' in normalized:
+-        return -12.0
+-
+-    if 'motleyfool' in normalized:
+-        return -8.0
+-    if 'investorplace' in normalized or 'zacks' in normalized or 'stocktradersdaily' in normalized:
+-        return -18.0
+-    if 'bo3.gg' in normalized:
+-        return 3.0
+-    if 'csgo.com' in normalized:
+-        return 8.0
+-    if 'hltv' in normalized:
+-        return 16.0
+-    if 'liquipedia' in normalized:
+-        return 5.0
+-    if 'flashscore' in normalized:
+-        return -10.0
+-    if 'esports.net' in normalized:
+-        return -4.0
+-    if 'vsau' in normalized:
+-        return -6.0
+-    if 'english.news.cn' in normalized or normalized.endswith('news.cn'):
+-        return -6.0
+-    if any(s in normalized for s in _TRUSTED_HOST_SNIPPETS):
+-        return 22.0
+-    if any(s in normalized for s in _WEAK_HOST_SNIPPETS):
+-        return -6.0
+-    return 10.0
++        base = _SOURCE_QUALITY[normalized]
++    elif 'youtube' in normalized or 'youtu.be' in normalized:
++        base = -120.0
++    elif 'wikipedia' in normalized or 'wikimedia' in normalized:
++        base = -120.0
++    elif 'iheart' in normalized or 'reddit' in normalized:
++        base = -90.0
++    elif 'reuters' in normalized:
++        base = 36.0
++    elif 'associated press' in normalized or normalized == 'ap' or 'apnews' in normalized:
++        base = 34.0
++    elif 'bloomberg' in normalized:
++        base = 22.0
++    elif 'ft.com' in normalized or 'financial times' in normalized:
++        base = 31.0
++    elif 'wsj' in normalized or 'wall street journal' in normalized:
++        base = 30.0
++    elif 'bbc' in normalized:
++        base = 28.0
++    elif 'dw.com' in normalized or normalized == 'dw':
++        base = 27.0
++    elif 'sky.com' in normalized or 'sky news' in normalized:
++        base = 24.0
++    elif 'guardian' in normalized:
++        base = 24.0
++    elif 'nytimes' in normalized or normalized == 'nyt':
++        base = 26.0
++    elif 'weex' in normalized:
++        base = -24.0
++    elif 'coinmarketcap' in normalized:
++        base = -10.0
++    elif 'cryptobriefing' in normalized or 'news.bitcoin' in normalized:
++        base = 6.0
++    elif 'carscoops' in normalized or 'autoblog' in normalized or 'motor1' in normalized:
++        base = 9.0
++    elif 'newsminimalist' in normalized:
++        base = -8.0
++    elif 'tourprom' in normalized or 'eadaily' in normalized or 'kp.ru' in normalized:
++        base = -12.0
++    elif 'motleyfool' in normalized:
++        base = -8.0
++    elif 'investorplace' in normalized or 'zacks' in normalized or 'stocktradersdaily' in normalized:
++        base = -18.0
++    elif 'bo3.gg' in normalized:
++        base = 3.0
++    elif 'csgo.com' in normalized:
++        base = 8.0
++    elif 'hltv' in normalized:
++        base = 16.0
++    elif 'liquipedia' in normalized:
++        base = 5.0
++    elif 'flashscore' in normalized:
++        base = -10.0
++    elif 'esports.net' in normalized:
++        base = -4.0
++    elif 'vsau' in normalized:
++        base = -6.0
++    elif 'english.news.cn' in normalized or normalized.endswith('news.cn'):
++        base = -6.0
++    elif any(s in normalized for s in _TRUSTED_HOST_SNIPPETS):
++        base = 22.0
++    elif any(s in normalized for s in _WEAK_HOST_SNIPPETS):
++        base = -6.0
++    else:
++        base = 10.0
++    return base + _vertical_source_adjustment(normalized, topic_kind)
+ 
+ 
+-def source_authority_tier(source_name: str) -> str:
+-    weight = source_quality_weight(source_name)
++def source_authority_tier(source_name: str, topic_kind: str | None = None) -> str:
++    weight = source_quality_weight(source_name, topic_kind)
+     if weight >= 22.0:
+         return "strong"
+     if weight >= 8.0:
+@@ -183,7 +212,7 @@
+ def article_score(article: NormalizedSourceItem) -> float:
+     return (
+         freshness_weight(article.published_at)
+-        + source_quality_weight(article.source_name)
++        + source_quality_weight(article.source_name, str(article.metadata.get("topic_kind", "")))
+         + language_priority(article.source_language)
+         + float(article.metadata.get("topic_match_score", 0)) * 1.0
+         + float(article.metadata.get("directness_score", 0)) * 1.8

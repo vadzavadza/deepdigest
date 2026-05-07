@@ -1,0 +1,670 @@
+diff --git a/.env.example b/.env.example
+index 1eded73..6ccb979 100644
+--- a/.env.example
++++ b/.env.example
+@@ -49,7 +49,7 @@ SCHEDULER_JOB_MISFIRE_GRACE_SECONDS=300
+ OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
+ OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_DIRECTNESS=12
+ OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_CONFIDENCE=2
+-OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=2
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
+ 
+ # v5.3 single-run adaptive search
+ OPENROUTER_ADAPTIVE_TARGET_CANDIDATES=3
+diff --git a/ADDED_FILES_V6_1.md b/ADDED_FILES_V6_1.md
+new file mode 100644
+index 0000000..d2f6ca5
+--- /dev/null
++++ b/ADDED_FILES_V6_1.md
+@@ -0,0 +1,9 @@
++tests/test_quality_engine_v61.py
++QUALITY_ENGINE_V6_1_SELECTION_RU.md
++START_HERE_V6_1_RU.md
++TEST_REPORT_V6_1.md
++PATCH_V6_TO_V6_1.diff
++CHANGED_FILES_V6_1.md
++REMOVED_FILES_V6_1.md
++ADDED_FILES_V6_1.md
++MANIFEST_V6_1_AFTER.txt
+diff --git a/CHANGED_FILES_V6_1.md b/CHANGED_FILES_V6_1.md
+new file mode 100644
+index 0000000..511c767
+--- /dev/null
++++ b/CHANGED_FILES_V6_1.md
+@@ -0,0 +1,9 @@
++.env.example
++app/application/services/topic_processing.py
++app/bot/handlers/topics_list.py
++app/domain/policies/ranking.py
++app/infrastructure/sources/openrouter_web_search.py
++app/search_v2/__init__.py
++app/search_v2/core.py
++app/shared/settings.py
++tests/test_quality_engine_v61.py
+diff --git a/MANIFEST_V6_1_AFTER.txt b/MANIFEST_V6_1_AFTER.txt
+new file mode 100644
+index 0000000..e68536b
+--- /dev/null
++++ b/MANIFEST_V6_1_AFTER.txt
+@@ -0,0 +1,152 @@
++.env.example
++ADDED_FILES_V5_2.md
++ADDED_FILES_V5_3.md
++ADDED_FILES_V5_4.md
++ADDED_FILES_V6.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++CHANGED_FILES_V5_3.md
++CHANGED_FILES_V5_4.md
++CHANGED_FILES_V6.md
++DEBUG_GUIDE_V6_RU.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_2_BEFORE_V5_3.txt
++MANIFEST_V5_3_AFTER.txt
++MANIFEST_V5_3_BEFORE_V5_4.txt
++MANIFEST_V5_4_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++MANIFEST_V6_AFTER.txt
++MANIFEST_V6_BEFORE.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_2_TO_V5_3.diff
++PATCH_V5_3_TO_V5_4.diff
++PATCH_V5_4_TO_V6.diff
++PATCH_V5_TO_V5_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++REMOVED_FILES_V5_3.md
++REMOVED_FILES_V5_4.md
++REMOVED_FILES_V6.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++START_HERE_V5_3_RU.md
++START_HERE_V5_4_RU.md
++START_HERE_V6_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++TEST_REPORT_V5_3.md
++TEST_REPORT_V5_4.md
++TEST_REPORT_V6.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/core.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_engine_v53.py
++tests/test_quality_engine_v54.py
++tests/test_quality_engine_v6.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff --git a/QUALITY_ENGINE_V6_1_SELECTION_RU.md b/QUALITY_ENGINE_V6_1_SELECTION_RU.md
+new file mode 100644
+index 0000000..b3c2517
+--- /dev/null
++++ b/QUALITY_ENGINE_V6_1_SELECTION_RU.md
+@@ -0,0 +1,32 @@
++# v6.1 Quality Selection Patch
++
++Цель патча — не менять весь проект и не подгонять движок под конкретные темы, а усилить универсальный слой выбора новостей после v6.
++
++## Что исправлено
++
++1. **Повторный запуск сразу после дайджеста стал строже**
++   - weak-freshness кандидаты не отправляются при immediate repeat;
++   - кандидаты с низкой авторитетностью источника не вытаскиваются как “остатки”;
++   - кандидаты, которые не новее последнего дайджеста, пропускаются.
++
++2. **Fetch-block fallback стал полезнее**
++   - если сайт отдал 403/timeout, но OpenRouter дал сильный конкретный заголовок статьи, кандидат может пройти как `weak_but_usable`;
++   - price pages, hubs и слабые title-only страницы всё ещё отбрасываются.
++
++3. **Source authority усилен**
++   - сильные источники ранжируются выше;
++   - биржевые/рекламные/агрегаторные/сомнительные источники получают штраф;
++   - добавлен `source_authority_tier()` для логов и guard-логики.
++
++4. **Диагностика стала понятнее**
++   - в `candidate_decision` теперь есть `published_at` и `age_hours`;
++   - ручной запуск показывает, сколько кандидатов было скрыто как уже отправленные, repeat leftovers или low-quality.
++
++## Важно
++
++Это не финальная магия. После установки нужно снова снять логи по 5–7 темам и смотреть:
++
++- не отправляет ли второй запуск слабые остатки;
++- не стало ли слишком мало weak fallback;
++- какие источники чаще проходят/отбрасываются;
++- не режутся ли нормальные статьи как low-quality.
+diff --git a/REMOVED_FILES_V6_1.md b/REMOVED_FILES_V6_1.md
+new file mode 100644
+index 0000000..545ddf3
+--- /dev/null
++++ b/REMOVED_FILES_V6_1.md
+@@ -0,0 +1 @@
++No working files removed.
+diff --git a/START_HERE_V6_1_RU.md b/START_HERE_V6_1_RU.md
+new file mode 100644
+index 0000000..8d0100f
+--- /dev/null
++++ b/START_HERE_V6_1_RU.md
+@@ -0,0 +1,26 @@
++# Как запускать v6.1
++
++1. Распакуй архив.
++2. Проверь `.env`:
++
++```env
++APP_DEBUG=true
++OPENROUTER_DEBUG_REJECTIONS=true
++OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
++```
++
++3. Запусти через Docker с логами:
++
++```cmd
++powershell -Command "docker compose up --build --force-recreate 2>&1 | Tee-Object -FilePath debug_v6_1.log"
++```
++
++4. Протестируй 5–7 разных тем.
++5. Сохрани фильтрованный лог:
++
++```cmd
++findstr /I "source_fetch_plan source_fetch_pass source_fetch_success source_fetch_empty candidate_decision candidate_skipped story_skipped publish_done" debug_v6_1.log > search_debug_v6_1_only.txt
++```
++
++Не присылай `.env` целиком. В прошлых логах был Telegram token — лучше перевыпустить токен через BotFather.
+diff --git a/TEST_REPORT_V6_1.md b/TEST_REPORT_V6_1.md
+new file mode 100644
+index 0000000..f6ad809
+--- /dev/null
++++ b/TEST_REPORT_V6_1.md
+@@ -0,0 +1,11 @@
++# Test report v6.1
++
++- `py_compile` for changed runtime files: PASS
++- Added deterministic tests: `tests/test_quality_engine_v61.py`
++- Full pytest was not executed in this sandbox because the available runtime pytest environment was not responsive here.
++
++Recommended local command:
++
++```bash
++pytest -q tests/test_quality_engine_v6.py tests/test_quality_engine_v61.py tests/test_ranking.py tests/test_search_v2.py tests/test_quality_filters.py
++```
+diff --git a/app/application/services/topic_processing.py b/app/application/services/topic_processing.py
+index 89592d3..3f72252 100644
+--- a/app/application/services/topic_processing.py
++++ b/app/application/services/topic_processing.py
+@@ -7,7 +7,7 @@ from app.application.services.deduplication import filter_coherent_story_candida
+ from app.application.services.source_collection import SourceCollectionService
+ from app.domain.enums import DeliveryMode, OutputLanguage, RelevanceLabel, SentType
+ from app.domain.policies.normalization import normalize_title
+-from app.domain.policies.ranking import article_score, rank_stories, select_primary_article, select_diverse_stories
++from app.domain.policies.ranking import article_score, rank_stories, select_primary_article, select_diverse_stories, source_quality_weight, source_authority_tier
+ from rapidfuzz import fuzz
+ from urllib.parse import urlparse
+ from app.infrastructure.llm.base import LLMProvider
+@@ -33,6 +33,9 @@ class TopicProcessingOutcome:
+     unique_stories: int
+     sent_count: int
+     source_stats: list[SourceFetchStats] = field(default_factory=list)
++    skipped_already_sent: int = 0
++    skipped_immediate_repeat: int = 0
++    skipped_low_quality: int = 0
+ 
+ 
+ class TopicProcessingService:
+@@ -136,6 +139,9 @@ class TopicProcessingService:
+             sent_signatures = await self._sent_story_repository.get_sent_story_signatures(topic_id=topic_id)
+             sent_url_fingerprints = await self._sent_story_repository.get_sent_url_fingerprints(topic_id=topic_id)
+             selected_candidates = []
++            skipped_already_sent = 0
++            skipped_immediate_repeat = 0
++            skipped_low_quality = 0
+             relevance_checks = 0
+             max_relevance_checks = max(settings.llm_relevance_max_checks_per_topic, settings.max_stories_per_post)
+             for story in story_candidates:
+@@ -165,10 +171,45 @@ class TopicProcessingService:
+                     parsed = urlparse(str(primary.url))
+                     primary_fp = f"{parsed.netloc.lower()}{parsed.path.rstrip('/').lower()}"
+                 if primary_fp and primary_fp in sent_url_fingerprints:
++                    skipped_already_sent += 1
++                    logger.info(
++                        "candidate_skipped_already_sent_url",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                    )
+                     continue
+ 
++                if immediate_repeat:
++                    is_weak_candidate = primary.metadata.get("freshness_verified") is False
++                    source_weight = source_quality_weight(primary.source_name)
++                    not_newer_than_last_digest = bool(
++                        last_sent_at and primary.published_at <= last_sent_at + timedelta(minutes=2)
++                    )
++                    if is_weak_candidate or not_newer_than_last_digest or source_weight < 12.0:
++                        skipped_immediate_repeat += 1
++                        logger.info(
++                            "candidate_skipped_immediate_repeat_guard",
++                            topic_id=topic_id,
++                            story_hash=story.story_hash,
++                            source_name=primary.source_name,
++                            source_weight=source_weight,
++                            authority_tier=source_authority_tier(primary.source_name),
++                            freshness_verified=primary.metadata.get("freshness_verified"),
++                            published_at=primary.published_at.isoformat(),
++                            last_sent_at=last_sent_at.isoformat() if last_sent_at else None,
++                        )
++                        continue
++
+                 story_signature = normalize_title(story.canonical_title)
+                 if any(fuzz.token_set_ratio(story_signature, existing) >= 90 for existing in sent_signatures):
++                    skipped_already_sent += 1
++                    logger.info(
++                        "candidate_skipped_already_sent_signature",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                    )
+                     continue
+ 
+                 db_story = await self._story_repository.upsert_story(
+@@ -179,6 +220,13 @@ class TopicProcessingService:
+                     last_seen_at=story.articles[0].published_at,
+                 )
+                 if db_story.id in recent_story_ids:
++                    skipped_already_sent += 1
++                    logger.info(
++                        "candidate_skipped_recent_story_id",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                    )
+                     continue
+                 selected_candidates.append((story, db_story))
+ 
+@@ -200,7 +248,17 @@ class TopicProcessingService:
+             for story, db_story in ordered_candidates[: max_items]:
+                 primary = select_primary_article(story.articles)
+                 is_weak_freshness = primary.metadata.get("freshness_verified") is False
++                if immediate_repeat and is_weak_freshness:
++                    skipped_immediate_repeat += 1
++                    logger.info(
++                        "story_skipped_immediate_repeat_weak_freshness",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                    )
++                    continue
+                 if is_weak_freshness and weak_freshness_sent >= max_weak_freshness:
++                    skipped_low_quality += 1
+                     logger.info(
+                         "story_skipped_weak_freshness_cap",
+                         topic_id=topic_id,
+@@ -209,12 +267,15 @@ class TopicProcessingService:
+                         published_at_source=primary.metadata.get("published_at_source"),
+                     )
+                     continue
+-                if primary.url is None or article_score(primary) < 0:
++                primary_score = article_score(primary)
++                if primary.url is None or primary_score < 0:
++                    skipped_low_quality += 1
+                     logger.info(
+-                        'story_skipped_without_url',
++                        'story_skipped_without_url_or_low_score',
+                         topic_id=topic_id,
+                         story_hash=story.story_hash,
+                         source_name=primary.source_name,
++                        article_score=primary_score,
+                     )
+                     continue
+ 
+@@ -277,12 +338,18 @@ class TopicProcessingService:
+                 found_articles=collection_result.items_count,
+                 unique_stories=len(story_candidates),
+                 sent_count=len(payload_items),
++                skipped_already_sent=skipped_already_sent,
++                skipped_immediate_repeat=skipped_immediate_repeat,
++                skipped_low_quality=skipped_low_quality,
+             )
+             return TopicProcessingOutcome(
+                 found_articles=collection_result.items_count,
+                 unique_stories=len(story_candidates),
+                 sent_count=len(payload_items),
+                 source_stats=collection_result.stats,
++                skipped_already_sent=skipped_already_sent,
++                skipped_immediate_repeat=skipped_immediate_repeat,
++                skipped_low_quality=skipped_low_quality,
+             )
+         except Exception as exc:
+             try:
+diff --git a/app/bot/handlers/topics_list.py b/app/bot/handlers/topics_list.py
+index b603ef2..3eb15d3 100644
+--- a/app/bot/handlers/topics_list.py
++++ b/app/bot/handlers/topics_list.py
+@@ -148,8 +148,17 @@ async def _send_run_result_message(message, topic_query: str, result: TopicProce
+         source_lines.append(line)
+ 
+     diagnostics = "\n".join(source_lines)
++    extra_lines = []
++    if result.skipped_already_sent:
++        extra_lines.append(f"• уже отправлялось раньше: {result.skipped_already_sent}")
++    if result.skipped_immediate_repeat:
++        extra_lines.append(f"• скрыто повторным запуском: {result.skipped_immediate_repeat}")
++    if result.skipped_low_quality:
++        extra_lines.append(f"• не прошло quality-gate: {result.skipped_low_quality}")
++    if extra_lines:
++        diagnostics = (diagnostics + "\n" if diagnostics else "") + "Диагностика:\n" + "\n".join(extra_lines)
+     if diagnostics:
+-        diagnostics = f"\n\nИсточники:\n{diagnostics}"
++        diagnostics = f"\n\nИсточники/диагностика:\n{diagnostics}"
+ 
+     if result.sent_count > 0:
+         await message.reply_text(
+diff --git a/app/domain/policies/ranking.py b/app/domain/policies/ranking.py
+index 4b255a0..7e23730 100644
+--- a/app/domain/policies/ranking.py
++++ b/app/domain/policies/ranking.py
+@@ -58,7 +58,7 @@ _SOURCE_QUALITY = {
+ }
+ 
+ _TRUSTED_HOST_SNIPPETS = ("reuters", "apnews", "bbc", "dw", "ft.com", "wsj", "theguardian", "nytimes", "cnn", "cnbc")
+-_WEAK_HOST_SNIPPETS = ("motleyfool", "investorplace", "zacks", "stocktradersdaily", "news.cn", "flashscore", "vsau", "esports.net", "bo3.gg")
++_WEAK_HOST_SNIPPETS = ("motleyfool", "investorplace", "zacks", "stocktradersdaily", "news.cn", "flashscore", "vsau", "esports.net", "bo3.gg", "weex", "cryptonews", "u.today", "coinmarketcap", "tourprom", "eadaily", "kp.ru")
+ 
+ 
+ def language_priority(language: str | None) -> float:
+@@ -101,6 +101,19 @@ def source_quality_weight(source_name: str) -> float:
+         return 24.0
+     if 'nytimes' in normalized or normalized == 'nyt':
+         return 26.0
++    if 'weex' in normalized:
++        return -24.0
++    if 'coinmarketcap' in normalized:
++        return -10.0
++    if 'cryptobriefing' in normalized or 'news.bitcoin' in normalized:
++        return 6.0
++    if 'carscoops' in normalized or 'autoblog' in normalized or 'motor1' in normalized:
++        return 9.0
++    if 'newsminimalist' in normalized:
++        return -8.0
++    if 'tourprom' in normalized or 'eadaily' in normalized or 'kp.ru' in normalized:
++        return -12.0
++
+     if 'motleyfool' in normalized:
+         return -8.0
+     if 'investorplace' in normalized or 'zacks' in normalized or 'stocktradersdaily' in normalized:
+@@ -128,6 +141,16 @@ def source_quality_weight(source_name: str) -> float:
+     return 10.0
+ 
+ 
++def source_authority_tier(source_name: str) -> str:
++    weight = source_quality_weight(source_name)
++    if weight >= 22.0:
++        return "strong"
++    if weight >= 8.0:
++        return "standard"
++    if weight >= 0.0:
++        return "niche"
++    return "weak"
++
+ def freshness_weight(published_at: datetime) -> float:
+     now = datetime.now(tz=timezone.utc)
+     delta_hours = max((now - published_at).total_seconds() / 3600.0, 0.0)
+diff --git a/app/infrastructure/sources/openrouter_web_search.py b/app/infrastructure/sources/openrouter_web_search.py
+index 85e0670..9c3dc74 100644
+--- a/app/infrastructure/sources/openrouter_web_search.py
++++ b/app/infrastructure/sources/openrouter_web_search.py
+@@ -12,7 +12,7 @@ from pydantic import HttpUrl, TypeAdapter
+ 
+ from app.domain.enums import SourceType
+ from app.schemas.sources import RawSourceItem
+-from app.search_v2 import build_search_plan, extract_html_metadata, article_confidence, candidate_quality, evaluate_candidate, FreshnessPolicy
++from app.search_v2 import build_search_plan, extract_html_metadata, article_confidence, candidate_quality, evaluate_candidate, FreshnessPolicy, candidate_age_hours
+ from app.shared.logging import get_logger
+ from app.shared.settings import get_settings
+ 
+@@ -636,6 +636,8 @@ class OpenRouterWebSearchSource:
+             article_confidence=decision.article_confidence,
+             freshness_verified=decision.freshness_verified,
+             published_at_source=decision.published_at_source,
++            published_at=decision.published_at.isoformat() if decision.published_at else None,
++            age_hours=candidate_age_hours(decision.published_at),
+             url=url,
+             title=title,
+         )
+diff --git a/app/search_v2/__init__.py b/app/search_v2/__init__.py
+index cbfaabb..95b9b6a 100644
+--- a/app/search_v2/__init__.py
++++ b/app/search_v2/__init__.py
+@@ -1,3 +1,3 @@
+ from .strategy import SearchPlan, build_search_plan, classify_topic, canonicalize_topic
+ from .article_filter import extract_html_metadata, is_candidate_article, topic_match_score, article_confidence, candidate_quality, directness_score
+-from .core import CandidateStatus, CandidateDecision, FreshnessPolicy, SearchDebugReport, evaluate_candidate
++from .core import CandidateStatus, CandidateDecision, FreshnessPolicy, SearchDebugReport, evaluate_candidate, candidate_age_hours
+diff --git a/app/search_v2/core.py b/app/search_v2/core.py
+index ab4ee91..0542e31 100644
+--- a/app/search_v2/core.py
++++ b/app/search_v2/core.py
+@@ -64,10 +64,17 @@ def _utc(dt: datetime | None) -> datetime | None:
+     return dt.astimezone(timezone.utc)
+ 
+ 
++def candidate_age_hours(published_at: datetime | None, to_dt: datetime | None = None) -> float | None:
++    published_at = _utc(published_at)
++    if published_at is None:
++        return None
++    to_dt = _utc(to_dt) or datetime.now(tz=timezone.utc)
++    return max((to_dt - published_at).total_seconds() / 3600.0, 0.0)
++
+ def _freshness_bucket(*, published_at: datetime | None, to_dt: datetime, verified: bool, policy: FreshnessPolicy) -> str:
+     if published_at is None:
+         return "undated"
+-    age_hours = max((to_dt - published_at).total_seconds() / 3600.0, 0.0)
++    age_hours = candidate_age_hours(published_at, to_dt) or 0.0
+     if not verified:
+         return "weak_unverified"
+     if age_hours <= policy.soft_age_hours:
+@@ -146,12 +153,24 @@ def evaluate_candidate(
+         )
+ 
+     # Direct search annotations without a verified date are usable, but capped later.
+-    can_use_weak = (
+-        policy.allow_weak_undated
+-        and search_annotation
++    # v6.1: a site may block our HTTP fetch (403/DataDome/etc.) while OpenRouter
++    # already gave us a strong article title. Do not require a snippet in that case,
++    # but demand higher article confidence so price pages/hubs stay out.
++    strong_title_only_annotation = (
++        search_annotation
++        and not search_snippet
++        and quality.directness_score >= max(policy.weak_min_directness + 8, 24)
++        and article_conf >= max(policy.weak_min_article_confidence + 2, 4)
++    )
++    strong_snippet_annotation = (
++        search_annotation
+         and search_snippet
+         and quality.directness_score >= policy.weak_min_directness
+         and article_conf >= policy.weak_min_article_confidence
++    )
++    can_use_weak = (
++        policy.allow_weak_undated
++        and (strong_snippet_annotation or strong_title_only_annotation)
+         and qreason not in {"semantic_only_match", "no_direct_topic_evidence", "topic_score_below_threshold", "low_directness"}
+     )
+     if published_at is None and can_use_weak:
+diff --git a/app/shared/settings.py b/app/shared/settings.py
+index 4f33bdd..8e114e1 100644
+--- a/app/shared/settings.py
++++ b/app/shared/settings.py
+@@ -43,7 +43,7 @@ class Settings(BaseSettings):
+     openrouter_allow_search_snippet_fallback: bool = True
+     openrouter_search_snippet_fallback_min_directness: int = 12
+     openrouter_search_snippet_fallback_min_confidence: int = 2
+-    openrouter_max_weak_freshness_items_per_digest: int = 2
++    openrouter_max_weak_freshness_items_per_digest: int = 1
+     # v5.3: one run should perform enough adaptive search passes before giving up.
+     openrouter_adaptive_target_candidates: int = 3
+     openrouter_min_search_passes: int = 2
+diff --git a/tests/test_quality_engine_v61.py b/tests/test_quality_engine_v61.py
+new file mode 100644
+index 0000000..df34583
+--- /dev/null
++++ b/tests/test_quality_engine_v61.py
+@@ -0,0 +1,53 @@
++from __future__ import annotations
++
++from datetime import datetime, timedelta, timezone
++
++from app.domain.policies.ranking import source_authority_tier, source_quality_weight
++from app.search_v2.core import CandidateStatus, FreshnessPolicy, evaluate_candidate
++from app.search_v2.strategy import build_search_plan
++
++
++def _now() -> datetime:
++    return datetime(2026, 4, 26, 12, 0, tzinfo=timezone.utc)
++
++
++def test_fetch_blocked_strong_title_can_be_weak_but_usable_without_snippet() -> None:
++    now = _now()
++    plan = build_search_plan("Audi", from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++    decision = evaluate_candidate(
++        plan,
++        url="https://www.autoblog.com/news/audis-usa-sales-q1-2026/",
++        title="Audi's Only U.S. Sales Winners Are Sedans as Sales Drop 30% - Autoblog",
++        description=None,
++        published_at=None,
++        published_at_source=None,
++        to_dt=now,
++        policy=FreshnessPolicy(weak_min_article_confidence=2),
++        search_annotation=True,
++        search_snippet=False,
++    )
++    assert decision.status == CandidateStatus.WEAK_BUT_USABLE
++
++
++def test_price_or_market_page_title_only_is_not_weak_usable() -> None:
++    now = _now()
++    plan = build_search_plan("bitcoin", from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++    decision = evaluate_candidate(
++        plan,
++        url="https://www.forbes.com/advisor/investing/cryptocurrency/bitcoin-price-today/",
++        title="Bitcoin Price Today: BTC is trading at $74,217 – Forbes Advisor",
++        description=None,
++        published_at=None,
++        published_at_source=None,
++        to_dt=now,
++        policy=FreshnessPolicy(weak_min_article_confidence=2),
++        search_annotation=True,
++        search_snippet=False,
++    )
++    assert decision.status == CandidateStatus.REJECTED
++
++
++def test_low_authority_exchange_sources_are_penalized() -> None:
++    assert source_quality_weight("weex.com") < 0
++    assert source_authority_tier("weex.com") == "weak"
++    assert source_authority_tier("apnews.com") == "strong"

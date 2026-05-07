@@ -1,0 +1,1424 @@
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/.env.example v63work/.env.example
+--- v63base/.env.example	2026-04-26 20:35:38.000000000 +0000
++++ v63work/.env.example	2026-04-27 11:27:40.223018937 +0000
+@@ -59,3 +59,8 @@
+ # v6 universal search core
+ OPENROUTER_VERIFIED_HARD_MAX_ARTICLE_AGE_HOURS=720
+ OPENROUTER_FOLLOWUP_HARD_MAX_ARTICLE_AGE_HOURS=72
++
++# v6.3 evaluation/replay: save raw search candidates + decisions to ./debug_runs
++SEARCH_DEBUG_DUMP_ENABLED=false
++SEARCH_DEBUG_DUMP_DIR=debug_runs
++SEARCH_EVAL_FIXTURE_DIR=eval_fixtures
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/ADDED_FILES_V6_3.md v63work/ADDED_FILES_V6_3.md
+--- v63base/ADDED_FILES_V6_3.md	1970-01-01 00:00:00.000000000 +0000
++++ v63work/ADDED_FILES_V6_3.md	2026-04-27 11:32:30.723148468 +0000
+@@ -0,0 +1,12 @@
++- app/search_v2/recorder.py
++- app/tools/__init__.py
++- app/tools/replay_search_run.py
++- app/tools/benchmark_plan.py
++- eval_fixtures/benchmark_topics.jsonl
++- tests/test_quality_engine_v63_eval_replay.py
++- QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md
++- START_HERE_V6_3_RU.md
++- TEST_REPORT_V6_3.md
++- REMOVED_FILES_V6_3.md
++
++- debug_runs/.gitkeep
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/CHANGED_FILES_V6_3.md v63work/CHANGED_FILES_V6_3.md
+--- v63base/CHANGED_FILES_V6_3.md	1970-01-01 00:00:00.000000000 +0000
++++ v63work/CHANGED_FILES_V6_3.md	2026-04-27 11:30:24.679068449 +0000
+@@ -0,0 +1,4 @@
++- app/infrastructure/sources/openrouter_web_search.py
++- app/shared/settings.py
++- docker-compose.yml
++- .env.example
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/MANIFEST_V6_2_BEFORE_V6_3.txt v63work/MANIFEST_V6_2_BEFORE_V6_3.txt
+--- v63base/MANIFEST_V6_2_BEFORE_V6_3.txt	1970-01-01 00:00:00.000000000 +0000
++++ v63work/MANIFEST_V6_2_BEFORE_V6_3.txt	2026-04-27 11:32:22.642419734 +0000
+@@ -0,0 +1,171 @@
++./.env.example
++./ADDED_FILES_V5_2.md
++./ADDED_FILES_V5_3.md
++./ADDED_FILES_V5_4.md
++./ADDED_FILES_V6.md
++./ADDED_FILES_V6_1.md
++./ADDED_FILES_V6_2.md
++./CHANGED_FILES.md
++./CHANGED_FILES_V5_1.md
++./CHANGED_FILES_V5_2.md
++./CHANGED_FILES_V5_3.md
++./CHANGED_FILES_V5_4.md
++./CHANGED_FILES_V6.md
++./CHANGED_FILES_V6_1.md
++./CHANGED_FILES_V6_2.md
++./DEBUG_GUIDE_V6_RU.md
++./MANIFEST_AFTER.txt
++./MANIFEST_BEFORE.txt
++./MANIFEST_V5_1_AFTER.txt
++./MANIFEST_V5_1_BEFORE_V5_2.txt
++./MANIFEST_V5_2_AFTER.txt
++./MANIFEST_V5_2_BEFORE_V5_3.txt
++./MANIFEST_V5_3_AFTER.txt
++./MANIFEST_V5_3_BEFORE_V5_4.txt
++./MANIFEST_V5_4_AFTER.txt
++./MANIFEST_V5_BEFORE_V51.txt
++./MANIFEST_V6_1_AFTER.txt
++./MANIFEST_V6_1_BEFORE_V6_2.txt
++./MANIFEST_V6_2_AFTER.txt
++./MANIFEST_V6_AFTER.txt
++./MANIFEST_V6_BEFORE.txt
++./PATCH.diff
++./PATCH_V5_1_TO_V5_2.diff
++./PATCH_V5_2_TO_V5_3.diff
++./PATCH_V5_3_TO_V5_4.diff
++./PATCH_V5_4_TO_V6.diff
++./PATCH_V5_TO_V5_1.diff
++./PATCH_V6_1_TO_V6_2.diff
++./PATCH_V6_TO_V6_1.diff
++./QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++./QUALITY_ENGINE_V5_2_BALANCE_RU.md
++./QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++./QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++./QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++./QUALITY_ENGINE_V6_1_SELECTION_RU.md
++./QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
++./QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++./README.md
++./REMOVED_FILES.md
++./REMOVED_FILES_V5_1.md
++./REMOVED_FILES_V5_2.md
++./REMOVED_FILES_V5_3.md
++./REMOVED_FILES_V5_4.md
++./REMOVED_FILES_V6.md
++./REMOVED_FILES_V6_1.md
++./REMOVED_FILES_V6_2.md
++./START_HERE_RU.md
++./START_HERE_V5_2_RU.md
++./START_HERE_V5_3_RU.md
++./START_HERE_V5_4_RU.md
++./START_HERE_V6_1_RU.md
++./START_HERE_V6_2_RU.md
++./START_HERE_V6_RU.md
++./TECHNICAL_DECISIONS.md
++./TEST_REPORT.md
++./TEST_REPORT_V5_1.md
++./TEST_REPORT_V5_2.md
++./TEST_REPORT_V5_3.md
++./TEST_REPORT_V5_4.md
++./TEST_REPORT_V6.md
++./TEST_REPORT_V6_1.md
++./TEST_REPORT_V6_2.md
++./app/__init__.py
++./app/api/__init__.py
++./app/api/routes/__init__.py
++./app/api/routes/internal.py
++./app/api/routes/telegram.py
++./app/application/__init__.py
++./app/application/services/__init__.py
++./app/application/services/deduplication.py
++./app/application/services/source_collection.py
++./app/application/services/topic_processing.py
++./app/bot/__init__.py
++./app/bot/application.py
++./app/bot/handlers/__init__.py
++./app/bot/handlers/callbacks.py
++./app/bot/handlers/channels.py
++./app/bot/handlers/start.py
++./app/bot/handlers/topic_creation.py
++./app/bot/handlers/topics_list.py
++./app/bot/keyboards/__init__.py
++./app/bot/keyboards/channels.py
++./app/bot/keyboards/main_menu.py
++./app/bot/keyboards/topic_creation.py
++./app/bot/keyboards/topic_details.py
++./app/bot/keyboards/topics_list.py
++./app/domain/__init__.py
++./app/domain/enums.py
++./app/domain/policies/__init__.py
++./app/domain/policies/normalization.py
++./app/domain/policies/ranking.py
++./app/domain/value_objects.py
++./app/infrastructure/__init__.py
++./app/infrastructure/db/__init__.py
++./app/infrastructure/db/base.py
++./app/infrastructure/db/models.py
++./app/infrastructure/db/session.py
++./app/infrastructure/llm/__init__.py
++./app/infrastructure/llm/base.py
++./app/infrastructure/llm/openrouter.py
++./app/infrastructure/providers/__init__.py
++./app/infrastructure/providers/news/__init__.py
++./app/infrastructure/providers/news/base.py
++./app/infrastructure/providers/news/factory.py
++./app/infrastructure/providers/news/mock.py
++./app/infrastructure/repositories/__init__.py
++./app/infrastructure/repositories/channels.py
++./app/infrastructure/repositories/job_runs.py
++./app/infrastructure/repositories/sent_stories.py
++./app/infrastructure/repositories/stories.py
++./app/infrastructure/repositories/topics.py
++./app/infrastructure/repositories/users.py
++./app/infrastructure/scheduler/__init__.py
++./app/infrastructure/scheduler/service.py
++./app/infrastructure/sources/__init__.py
++./app/infrastructure/sources/base.py
++./app/infrastructure/sources/factory.py
++./app/infrastructure/sources/mock.py
++./app/infrastructure/sources/openrouter_web_search.py
++./app/infrastructure/sources/registry.py
++./app/infrastructure/sources/rss.py
++./app/infrastructure/sources/telegram_channel.py
++./app/infrastructure/telegram/__init__.py
++./app/infrastructure/telegram/callbacks.py
++./app/infrastructure/telegram/publisher.py
++./app/infrastructure/telegram/service_messages.py
++./app/main.py
++./app/scheduler_runner.py
++./app/schemas/__init__.py
++./app/schemas/articles.py
++./app/schemas/discovery.py
++./app/schemas/llm.py
++./app/schemas/publishing.py
++./app/schemas/sources.py
++./app/schemas/topics.py
++./app/search_v2/__init__.py
++./app/search_v2/article_filter.py
++./app/search_v2/core.py
++./app/search_v2/strategy.py
++./app/shared/__init__.py
++./app/shared/logging.py
++./app/shared/settings.py
++./docker-compose.yml
++./docker/app/Dockerfile
++./pyproject.toml
++./tests/conftest.py
++./tests/test_deduplication.py
++./tests/test_disambiguation_diversity.py
++./tests/test_freshness_guard_v51.py
++./tests/test_normalization.py
++./tests/test_quality_engine_v5.py
++./tests/test_quality_engine_v52.py
++./tests/test_quality_engine_v53.py
++./tests/test_quality_engine_v54.py
++./tests/test_quality_engine_v6.py
++./tests/test_quality_engine_v61.py
++./tests/test_quality_engine_v62.py
++./tests/test_quality_filters.py
++./tests/test_ranking.py
++./tests/test_search_v2.py
++./tests/test_source_collection.py
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/MANIFEST_V6_3_AFTER.txt v63work/MANIFEST_V6_3_AFTER.txt
+--- v63base/MANIFEST_V6_3_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
++++ v63work/MANIFEST_V6_3_AFTER.txt	2026-04-27 11:32:30.827755253 +0000
+@@ -0,0 +1,187 @@
++./.env.example
++./ADDED_FILES_V5_2.md
++./ADDED_FILES_V5_3.md
++./ADDED_FILES_V5_4.md
++./ADDED_FILES_V6.md
++./ADDED_FILES_V6_1.md
++./ADDED_FILES_V6_2.md
++./ADDED_FILES_V6_3.md
++./CHANGED_FILES.md
++./CHANGED_FILES_V5_1.md
++./CHANGED_FILES_V5_2.md
++./CHANGED_FILES_V5_3.md
++./CHANGED_FILES_V5_4.md
++./CHANGED_FILES_V6.md
++./CHANGED_FILES_V6_1.md
++./CHANGED_FILES_V6_2.md
++./CHANGED_FILES_V6_3.md
++./DEBUG_GUIDE_V6_RU.md
++./MANIFEST_AFTER.txt
++./MANIFEST_BEFORE.txt
++./MANIFEST_V5_1_AFTER.txt
++./MANIFEST_V5_1_BEFORE_V5_2.txt
++./MANIFEST_V5_2_AFTER.txt
++./MANIFEST_V5_2_BEFORE_V5_3.txt
++./MANIFEST_V5_3_AFTER.txt
++./MANIFEST_V5_3_BEFORE_V5_4.txt
++./MANIFEST_V5_4_AFTER.txt
++./MANIFEST_V5_BEFORE_V51.txt
++./MANIFEST_V6_1_AFTER.txt
++./MANIFEST_V6_1_BEFORE_V6_2.txt
++./MANIFEST_V6_2_AFTER.txt
++./MANIFEST_V6_2_BEFORE_V6_3.txt
++./MANIFEST_V6_3_AFTER.txt
++./MANIFEST_V6_AFTER.txt
++./MANIFEST_V6_BEFORE.txt
++./PATCH.diff
++./PATCH_V5_1_TO_V5_2.diff
++./PATCH_V5_2_TO_V5_3.diff
++./PATCH_V5_3_TO_V5_4.diff
++./PATCH_V5_4_TO_V6.diff
++./PATCH_V5_TO_V5_1.diff
++./PATCH_V6_1_TO_V6_2.diff
++./PATCH_V6_2_TO_V6_3.diff
++./PATCH_V6_TO_V6_1.diff
++./QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++./QUALITY_ENGINE_V5_2_BALANCE_RU.md
++./QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++./QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++./QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++./QUALITY_ENGINE_V6_1_SELECTION_RU.md
++./QUALITY_ENGINE_V6_2_INTELLIGENCE_RU.md
++./QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md
++./QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++./README.md
++./REMOVED_FILES.md
++./REMOVED_FILES_V5_1.md
++./REMOVED_FILES_V5_2.md
++./REMOVED_FILES_V5_3.md
++./REMOVED_FILES_V5_4.md
++./REMOVED_FILES_V6.md
++./REMOVED_FILES_V6_1.md
++./REMOVED_FILES_V6_2.md
++./REMOVED_FILES_V6_3.md
++./START_HERE_RU.md
++./START_HERE_V5_2_RU.md
++./START_HERE_V5_3_RU.md
++./START_HERE_V5_4_RU.md
++./START_HERE_V6_1_RU.md
++./START_HERE_V6_2_RU.md
++./START_HERE_V6_3_RU.md
++./START_HERE_V6_RU.md
++./TECHNICAL_DECISIONS.md
++./TEST_REPORT.md
++./TEST_REPORT_V5_1.md
++./TEST_REPORT_V5_2.md
++./TEST_REPORT_V5_3.md
++./TEST_REPORT_V5_4.md
++./TEST_REPORT_V6.md
++./TEST_REPORT_V6_1.md
++./TEST_REPORT_V6_2.md
++./TEST_REPORT_V6_3.md
++./app/__init__.py
++./app/api/__init__.py
++./app/api/routes/__init__.py
++./app/api/routes/internal.py
++./app/api/routes/telegram.py
++./app/application/__init__.py
++./app/application/services/__init__.py
++./app/application/services/deduplication.py
++./app/application/services/source_collection.py
++./app/application/services/topic_processing.py
++./app/bot/__init__.py
++./app/bot/application.py
++./app/bot/handlers/__init__.py
++./app/bot/handlers/callbacks.py
++./app/bot/handlers/channels.py
++./app/bot/handlers/start.py
++./app/bot/handlers/topic_creation.py
++./app/bot/handlers/topics_list.py
++./app/bot/keyboards/__init__.py
++./app/bot/keyboards/channels.py
++./app/bot/keyboards/main_menu.py
++./app/bot/keyboards/topic_creation.py
++./app/bot/keyboards/topic_details.py
++./app/bot/keyboards/topics_list.py
++./app/domain/__init__.py
++./app/domain/enums.py
++./app/domain/policies/__init__.py
++./app/domain/policies/normalization.py
++./app/domain/policies/ranking.py
++./app/domain/value_objects.py
++./app/infrastructure/__init__.py
++./app/infrastructure/db/__init__.py
++./app/infrastructure/db/base.py
++./app/infrastructure/db/models.py
++./app/infrastructure/db/session.py
++./app/infrastructure/llm/__init__.py
++./app/infrastructure/llm/base.py
++./app/infrastructure/llm/openrouter.py
++./app/infrastructure/providers/__init__.py
++./app/infrastructure/providers/news/__init__.py
++./app/infrastructure/providers/news/base.py
++./app/infrastructure/providers/news/factory.py
++./app/infrastructure/providers/news/mock.py
++./app/infrastructure/repositories/__init__.py
++./app/infrastructure/repositories/channels.py
++./app/infrastructure/repositories/job_runs.py
++./app/infrastructure/repositories/sent_stories.py
++./app/infrastructure/repositories/stories.py
++./app/infrastructure/repositories/topics.py
++./app/infrastructure/repositories/users.py
++./app/infrastructure/scheduler/__init__.py
++./app/infrastructure/scheduler/service.py
++./app/infrastructure/sources/__init__.py
++./app/infrastructure/sources/base.py
++./app/infrastructure/sources/factory.py
++./app/infrastructure/sources/mock.py
++./app/infrastructure/sources/openrouter_web_search.py
++./app/infrastructure/sources/registry.py
++./app/infrastructure/sources/rss.py
++./app/infrastructure/sources/telegram_channel.py
++./app/infrastructure/telegram/__init__.py
++./app/infrastructure/telegram/callbacks.py
++./app/infrastructure/telegram/publisher.py
++./app/infrastructure/telegram/service_messages.py
++./app/main.py
++./app/scheduler_runner.py
++./app/schemas/__init__.py
++./app/schemas/articles.py
++./app/schemas/discovery.py
++./app/schemas/llm.py
++./app/schemas/publishing.py
++./app/schemas/sources.py
++./app/schemas/topics.py
++./app/search_v2/__init__.py
++./app/search_v2/article_filter.py
++./app/search_v2/core.py
++./app/search_v2/recorder.py
++./app/search_v2/strategy.py
++./app/shared/__init__.py
++./app/shared/logging.py
++./app/shared/settings.py
++./app/tools/__init__.py
++./app/tools/benchmark_plan.py
++./app/tools/replay_search_run.py
++./debug_runs/.gitkeep
++./docker-compose.yml
++./docker/app/Dockerfile
++./eval_fixtures/benchmark_topics.jsonl
++./pyproject.toml
++./tests/conftest.py
++./tests/test_deduplication.py
++./tests/test_disambiguation_diversity.py
++./tests/test_freshness_guard_v51.py
++./tests/test_normalization.py
++./tests/test_quality_engine_v5.py
++./tests/test_quality_engine_v52.py
++./tests/test_quality_engine_v53.py
++./tests/test_quality_engine_v54.py
++./tests/test_quality_engine_v6.py
++./tests/test_quality_engine_v61.py
++./tests/test_quality_engine_v62.py
++./tests/test_quality_engine_v63_eval_replay.py
++./tests/test_quality_filters.py
++./tests/test_ranking.py
++./tests/test_search_v2.py
++./tests/test_source_collection.py
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md v63work/QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md
+--- v63base/QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ v63work/QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md	2026-04-27 11:30:24.613536688 +0000
+@@ -0,0 +1,80 @@
++# v6.3 Evaluation & Replay Framework
++
++Эта версия не пытается «ещё раз угадать» правильные фильтры по скриншотам. Она добавляет измерительный слой, чтобы дальше улучшать новостной поиск быстрее и дешевле.
++
++## Что добавлено
++
++1. **Search run dumps**
++   Каждый live-запуск может сохранять JSON-файл со всей поисковой диагностикой:
++   - тема;
++   - определённый `topic_kind`;
++   - query variants;
++   - raw candidates от OpenRouter;
++   - решения по кандидатам (`candidate_decision`);
++   - финальные выбранные материалы;
++   - причины отказов.
++
++2. **Replay report**
++   Сохранённые JSON-файлы можно анализировать локально без новых OpenRouter-запросов:
++
++   ```cmd
++   docker compose run --rm app python -m app.tools.replay_search_run debug_runs/*.json --out debug_runs/replay_report.md
++   ```
++
++3. **Benchmark query-plan report**
++   Можно отдельно проверить, как classifier/query-planner понимает эталонные темы, тоже без OpenRouter:
++
++   ```cmd
++   docker compose run --rm app python -m app.tools.benchmark_plan --input eval_fixtures/benchmark_topics.jsonl --out debug_runs/benchmark_plan_report.md
++   ```
++
++4. **Docker volumes**
++   В `docker-compose.yml` добавлены volume-маунты:
++   - `./debug_runs:/app/debug_runs`
++   - `./eval_fixtures:/app/eval_fixtures`
++
++   Поэтому JSON-дампы и отчёты будут лежать на Windows-хосте в папке проекта.
++
++## Почему это важно
++
++Раньше процесс был такой:
++
++```text
++скрин → догадка → патч → новый платный live-тест
++```
++
++Теперь процесс должен быть такой:
++
++```text
++live-тест → сохраняем raw candidates/decisions → replay/анализ бесплатно → точечный патч
++```
++
++Это должно сократить расход денег и убрать ощущение бега на месте.
++
++## Новые настройки `.env`
++
++```env
++SEARCH_DEBUG_DUMP_ENABLED=true
++SEARCH_DEBUG_DUMP_DIR=debug_runs
++SEARCH_EVAL_FIXTURE_DIR=eval_fixtures
++APP_DEBUG=true
++OPENROUTER_DEBUG_REJECTIONS=true
++```
++
++Для обычной эксплуатации можно потом выключить:
++
++```env
++SEARCH_DEBUG_DUMP_ENABLED=false
++```
++
++## Что смотреть в `replay_report.md`
++
++- `provider_returned_zero` — OpenRouter реально дал 0.
++- `filter_or_selection_zeroed_results` — OpenRouter дал кандидатов, но наш фильтр/selection всё убил.
++- `only_weak_freshness_selected` — отправлены только материалы без подтверждённой даты.
++- `review_or_buying_guide_candidates_present` — в выдаче были reviews/guides.
++- `hub_pages_present_in_candidates` — OpenRouter принёс страницы-разделы/хабы.
++
++## Важно
++
++Это не финальная «качество v6.3». Это инструмент, чтобы правильно довести качество. Следующий quality patch надо делать уже по replay-отчётам, а не по единичным скриншотам.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/REMOVED_FILES_V6_3.md v63work/REMOVED_FILES_V6_3.md
+--- v63base/REMOVED_FILES_V6_3.md	1970-01-01 00:00:00.000000000 +0000
++++ v63work/REMOVED_FILES_V6_3.md	2026-04-27 11:30:24.655231919 +0000
+@@ -0,0 +1 @@
++No working files removed.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/START_HERE_V6_3_RU.md v63work/START_HERE_V6_3_RU.md
+--- v63base/START_HERE_V6_3_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ v63work/START_HERE_V6_3_RU.md	2026-04-27 11:30:24.627975267 +0000
+@@ -0,0 +1,63 @@
++# START HERE — v6.3 Eval/Replay
++
++## 1. Обнови `.env`
++
++Добавь или проверь:
++
++```env
++APP_DEBUG=true
++OPENROUTER_DEBUG_REJECTIONS=true
++SEARCH_DEBUG_DUMP_ENABLED=true
++SEARCH_DEBUG_DUMP_DIR=debug_runs
++SEARCH_EVAL_FIXTURE_DIR=eval_fixtures
++```
++
++## 2. Запусти Docker
++
++```cmd
++powershell -Command "docker compose up --build --force-recreate 2>&1 | Tee-Object -FilePath debug_v6_3.log"
++```
++
++## 3. Прогони не больше 8–12 тем
++
++Например:
++
++```text
++Real Madrid
++CS
++Lexus
++Audi
++Universal Pictures
++Leonardo DiCaprio
++bitcoin
++Kyiv
++```
++
++## 4. Сгенерируй replay report
++
++В новом CMD из папки проекта:
++
++```cmd
++docker compose run --rm app python -m app.tools.replay_search_run debug_runs/*.json --out debug_runs/replay_report.md --json-out debug_runs/replay_summary.json
++```
++
++## 5. Сгенерируй benchmark plan report
++
++```cmd
++docker compose run --rm app python -m app.tools.benchmark_plan --input eval_fixtures/benchmark_topics.jsonl --out debug_runs/benchmark_plan_report.md --json-out debug_runs/benchmark_plan_report.json
++```
++
++## 6. Что прислать в чат
++
++Пришли эти файлы:
++
++```text
++debug_runs/replay_report.md
++debug_runs/benchmark_plan_report.md
++```
++
++Если хочешь, можешь ещё прислать 3–5 скринов Telegram, но главное теперь — отчёты.
++
++## Безопасность
++
++В `debug_v6_3.log` может попадать Telegram token через HTTP debug. Не отправляй полный лог, лучше отправляй только replay/benchmark reports. Если токен уже светился, перевыпусти его через BotFather.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/TEST_REPORT_V6_3.md v63work/TEST_REPORT_V6_3.md
+--- v63base/TEST_REPORT_V6_3.md	1970-01-01 00:00:00.000000000 +0000
++++ v63work/TEST_REPORT_V6_3.md	2026-04-27 11:30:24.642183693 +0000
+@@ -0,0 +1,17 @@
++# TEST REPORT v6.3
++
++Проверено в sandbox:
++
++- `py_compile` для новых файлов: PASS
++- `py_compile` для изменённого OpenRouter source/settings/tools: PASS
++- zip integrity: PASS
++
++Полный live OpenRouter/Telegram test здесь не запускался, потому что нужны реальные ключи и Docker/Webhook окружение.
++
++Локально после распаковки можно проверить:
++
++```cmd
++docker compose build
++
++docker compose run --rm app python -m app.tools.benchmark_plan --input eval_fixtures/benchmark_topics.jsonl --out debug_runs/benchmark_plan_report.md
++```
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/app/infrastructure/sources/openrouter_web_search.py v63work/app/infrastructure/sources/openrouter_web_search.py
+--- v63base/app/infrastructure/sources/openrouter_web_search.py	2026-04-27 10:30:49.742967896 +0000
++++ v63work/app/infrastructure/sources/openrouter_web_search.py	2026-04-27 11:28:16.596721310 +0000
+@@ -13,6 +13,7 @@
+ from app.domain.enums import SourceType
+ from app.schemas.sources import RawSourceItem
+ from app.search_v2 import build_search_plan, extract_html_metadata, article_confidence, candidate_quality, evaluate_candidate, FreshnessPolicy, candidate_age_hours
++from app.search_v2.recorder import SearchRunRecorder, SearchRunRecord, decision_event_from_candidate
+ from app.shared.logging import get_logger
+ from app.shared.settings import get_settings
+ 
+@@ -103,6 +104,8 @@
+             weak_min_directness=self._search_snippet_fallback_min_directness,
+             weak_min_article_confidence=self._search_snippet_fallback_min_confidence,
+         )
++        self._debug_dump_enabled = settings.search_debug_dump_enabled
++        self._debug_dump_dir = settings.search_debug_dump_dir
+ 
+     async def fetch(
+         self,
+@@ -136,12 +139,40 @@
+         adaptive_target = min(target_limit, max(self._min_quality_candidates, self._adaptive_target_candidates))
+         min_passes = min(max_calls, self._min_search_passes)
+         pass_stats: list[dict[str, Any]] = []
++        recorder = SearchRunRecorder(enabled=self._debug_dump_enabled, directory=self._debug_dump_dir)
++        record = recorder.start(
++            topic=query,
++            normalized_topic=plan.normalized_query,
++            topic_kind=plan.topic_kind,
++            from_dt=from_dt,
++            to_dt=to_dt,
++            query_variants=queries,
++            settings={
++                "target_limit": target_limit,
++                "results_per_call": results_per_call,
++                "max_calls": max_calls,
++                "budget_usd": self._topic_budget_usd,
++                "min_quality_candidates": self._min_quality_candidates,
++                "allow_search_snippet_fallback": self._allow_search_snippet_fallback,
++                "max_article_age_hours": self._max_article_age_hours,
++                "verified_hard_max_article_age_hours": self._freshness_policy.hard_age_hours,
++            },
++        )
+ 
+         for pass_index, current_query in enumerate(queries, start=1):
+             payload = await self._call_server_tool(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call, broad_topic=plan.broad_topic, topic_kind=plan.topic_kind)
+             raw_items = self._extract_items_from_payload(payload, results_per_call)
+             self._append_unique_raw(rescue_pool, rescue_seen, raw_items)
+-            items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=False)
++            items = await self._enrich_and_filter_recent(
++                raw_items,
++                from_dt=from_dt,
++                to_dt=to_dt,
++                plan=plan,
++                allow_search_snippet_fallback=False,
++                record=record,
++                pass_index=pass_index,
++                query_text=current_query,
++            )
+             before_count = len(merged)
+             self._merge_unique(merged, seen_urls, items, target_limit)
+             pass_stats.append({
+@@ -151,6 +182,14 @@
+                 "accepted": len(items),
+                 "merged_after_pass": len(merged),
+             })
++            if record is not None:
++                record.add_pass(
++                    pass_index=pass_index,
++                    query=current_query,
++                    raw_items=raw_items,
++                    accepted_count=len(items),
++                    merged_count=len(merged),
++                )
+             logger.info(
+                 "source_fetch_pass",
+                 source=self.name,
+@@ -176,28 +215,60 @@
+                 to_dt=to_dt,
+                 plan=plan,
+                 allow_search_snippet_fallback=True,
++                record=record,
++                pass_index=0,
++                query_text="rescue_pool",
+             )
+             self._merge_unique(merged, seen_urls, rescue_items, target_limit)
+ 
+         if merged:
+             logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged), pass_stats=pass_stats)
++            if record is not None:
++                record.finish(status="success", final_items=merged)
++                dump_path = recorder.write(record)
++                if dump_path is not None:
++                    logger.info("search_debug_dump_written", source=self.name, path=str(dump_path), run_id=record.run_id)
+             return merged
+ 
+         if self._allow_plugin_fallback:
+             for current_query in queries:
+                 payload = await self._call_plugin_fallback(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call)
+                 raw_items = self._extract_items_from_payload(payload, results_per_call)
+-                items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=self._allow_search_snippet_fallback)
++                items = await self._enrich_and_filter_recent(
++                    raw_items,
++                    from_dt=from_dt,
++                    to_dt=to_dt,
++                    plan=plan,
++                    allow_search_snippet_fallback=self._allow_search_snippet_fallback,
++                    record=record,
++                    pass_index=100,
++                    query_text=current_query,
++                )
+                 self._merge_unique(merged, seen_urls, items, target_limit)
+                 if len(merged) >= target_limit:
+                     logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_budgeted", count=len(merged))
++                    if record is not None:
++                        record.finish(status="success_plugin_fallback", final_items=merged)
++                        dump_path = recorder.write(record)
++                        if dump_path is not None:
++                            logger.info("search_debug_dump_written", source=self.name, path=str(dump_path), run_id=record.run_id)
+                     return merged
+ 
+         if merged:
+             logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_budgeted", count=len(merged))
++            if record is not None:
++                record.finish(status="success_plugin_fallback", final_items=merged)
++                dump_path = recorder.write(record)
++                if dump_path is not None:
++                    logger.info("search_debug_dump_written", source=self.name, path=str(dump_path), run_id=record.run_id)
+             return merged
+ 
+         logger.info("source_fetch_empty", source=self.name, query=query)
++        if record is not None:
++            record.finish(status="empty", final_items=[])
++            dump_path = recorder.write(record)
++            if dump_path is not None:
++                logger.info("search_debug_dump_written", source=self.name, path=str(dump_path), run_id=record.run_id)
+         return []
+ 
+     def _allowed_search_calls(self, results_per_call: int) -> int:
+@@ -412,6 +483,9 @@
+         to_dt: datetime,
+         plan,
+         allow_search_snippet_fallback: bool = False,
++        record: SearchRunRecord | None = None,
++        pass_index: int | None = None,
++        query_text: str | None = None,
+     ) -> list[RawSourceItem]:
+         """Enrich links and run the v6 balanced candidate decision layer.
+ 
+@@ -437,6 +511,9 @@
+                             plan=plan,
+                             reason=f"http_{response.status_code}",
+                             allow_search_snippet_fallback=True,
++                            record=record,
++                            pass_index=pass_index,
++                            query_text=query_text,
+                         )
+                         if fallback is not None:
+                             enriched.append(fallback)
+@@ -449,6 +526,9 @@
+                         plan=plan,
+                         reason=type(exc).__name__,
+                         allow_search_snippet_fallback=True,
++                        record=record,
++                        pass_index=pass_index,
++                        query_text=query_text,
+                     )
+                     if fallback is not None:
+                         enriched.append(fallback)
+@@ -482,9 +562,14 @@
+                     search_snippet=bool(item.metadata.get("search_snippet")),
+                 )
+                 if not decision.usable:
+-                    self._log_decision(plan, canonical_url, candidate_title, candidate_desc, decision)
++                    event = self._log_decision(plan, canonical_url, candidate_title, candidate_desc, decision, pass_index=pass_index, query_text=query_text)
++                    if record is not None and event is not None:
++                        record.add_decision(event)
+                     continue
+ 
++                event = self._log_decision(plan, canonical_url, candidate_title, candidate_desc, decision, pass_index=pass_index, query_text=query_text)
++                if record is not None and event is not None:
++                    record.add_decision(event)
+                 enriched.append(item.model_copy(update={
+                     "url": parsed_url,
+                     "title": candidate_title,
+@@ -517,6 +602,9 @@
+         plan,
+         reason: str,
+         allow_search_snippet_fallback: bool = False,
++        record: SearchRunRecord | None = None,
++        pass_index: int | None = None,
++        query_text: str | None = None,
+     ) -> RawSourceItem | None:
+         url = str(item.url) if item.url is not None else None
+         if not url:
+@@ -541,8 +629,13 @@
+             search_snippet=bool(item.metadata.get("search_snippet")) and (allow_search_snippet_fallback or self._allow_search_snippet_fallback),
+         )
+         if not decision.usable:
+-            self._log_decision(plan, url, item.title, item.description, decision, prefix=f"fallback:{reason}")
++            event = self._log_decision(plan, url, item.title, item.description, decision, prefix=f"fallback:{reason}", pass_index=pass_index, query_text=query_text)
++            if record is not None and event is not None:
++                record.add_decision(event)
+             return None
++        event = self._log_decision(plan, url, item.title, item.description, decision, prefix=f"fallback:{reason}", pass_index=pass_index, query_text=query_text)
++        if record is not None and event is not None:
++            record.add_decision(event)
+         return item.model_copy(update={
+             "published_at": decision.published_at or to_dt,
+             "metadata": {
+@@ -625,12 +718,19 @@
+             title=title,
+         )
+ 
+-    def _log_decision(self, plan, url: str, title: str | None, description: str | None, decision, prefix: str | None = None) -> None:
+-        if not self._debug_rejections:
+-            return
++    def _log_decision(
++        self,
++        plan,
++        url: str,
++        title: str | None,
++        description: str | None,
++        decision,
++        prefix: str | None = None,
++        pass_index: int | None = None,
++        query_text: str | None = None,
++    ) -> dict[str, Any]:
+         reason = f"{prefix}:{decision.reason}" if prefix else decision.reason
+-        logger.info(
+-            "candidate_decision",
++        event = decision_event_from_candidate(
+             source=self.name,
+             topic=plan.normalized_query,
+             topic_kind=plan.topic_kind,
+@@ -641,11 +741,16 @@
+             article_confidence=decision.article_confidence,
+             freshness_verified=decision.freshness_verified,
+             published_at_source=decision.published_at_source,
+-            published_at=decision.published_at.isoformat() if decision.published_at else None,
++            published_at=decision.published_at,
+             age_hours=candidate_age_hours(decision.published_at),
+             url=url,
+             title=title,
++            pass_index=pass_index,
++            query=query_text,
+         )
++        if self._debug_rejections:
++            logger.info("candidate_decision", **event)
++        return event
+ 
+     @staticmethod
+     def _extract_canonical_url(html: str) -> str | None:
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/app/search_v2/recorder.py v63work/app/search_v2/recorder.py
+--- v63base/app/search_v2/recorder.py	1970-01-01 00:00:00.000000000 +0000
++++ v63work/app/search_v2/recorder.py	2026-04-27 11:26:53.531971145 +0000
+@@ -0,0 +1,208 @@
++from __future__ import annotations
++
++import json
++import re
++from collections import Counter
++from dataclasses import dataclass, field
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any
++from urllib.parse import urlparse
++
++from app.schemas.sources import RawSourceItem
++
++
++def _safe_slug(value: str, *, limit: int = 60) -> str:
++    slug = re.sub(r"[^a-zA-Z0-9а-яА-ЯёЁіІїЇєЄґҐ._-]+", "-", value.strip().lower()).strip("-._")
++    return (slug or "topic")[:limit]
++
++
++def _iso(dt: datetime | None) -> str | None:
++    if dt is None:
++        return None
++    if dt.tzinfo is None:
++        dt = dt.replace(tzinfo=timezone.utc)
++    return dt.astimezone(timezone.utc).isoformat()
++
++
++def raw_item_to_dict(item: RawSourceItem) -> dict[str, Any]:
++    return {
++        "provider": item.provider,
++        "source_type": item.source_type.value,
++        "external_id": item.external_id,
++        "url": str(item.url) if item.url is not None else None,
++        "title": item.title,
++        "description": item.description,
++        "text": item.text,
++        "source_name": item.source_name,
++        "source_language": item.source_language,
++        "published_at": _iso(item.published_at),
++        "metadata": dict(item.metadata or {}),
++    }
++
++
++def source_domain(raw_url: str | None, source_name: str | None = None) -> str:
++    if raw_url:
++        host = urlparse(raw_url).netloc.lower().replace("www.", "")
++        if host:
++            return host
++    return (source_name or "unknown").lower().replace("www.", "")
++
++
++@dataclass
++class SearchRunRecord:
++    run_id: str
++    topic: str
++    normalized_topic: str
++    topic_kind: str
++    from_dt: datetime
++    to_dt: datetime
++    query_variants: list[str]
++    settings: dict[str, Any]
++    pass_stats: list[dict[str, Any]] = field(default_factory=list)
++    raw_candidates: list[dict[str, Any]] = field(default_factory=list)
++    candidate_decisions: list[dict[str, Any]] = field(default_factory=list)
++    final_items: list[dict[str, Any]] = field(default_factory=list)
++    status: str = "running"
++    created_at: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
++    finished_at: datetime | None = None
++
++    def add_pass(self, *, pass_index: int, query: str, raw_items: list[RawSourceItem], accepted_count: int, merged_count: int) -> None:
++        raw_serialized = []
++        for item in raw_items:
++            serialized = raw_item_to_dict(item)
++            serialized["pass_index"] = pass_index
++            serialized["query"] = query
++            raw_serialized.append(serialized)
++            self.raw_candidates.append(serialized)
++        self.pass_stats.append(
++            {
++                "pass_index": pass_index,
++                "query": query,
++                "raw_count": len(raw_items),
++                "accepted_count": accepted_count,
++                "merged_count": merged_count,
++                "domains": dict(Counter(source_domain(item.get("url"), item.get("source_name")) for item in raw_serialized)),
++            }
++        )
++
++    def add_decision(self, event: dict[str, Any]) -> None:
++        self.candidate_decisions.append(event)
++
++    def finish(self, *, status: str, final_items: list[RawSourceItem]) -> None:
++        self.status = status
++        self.finished_at = datetime.now(tz=timezone.utc)
++        self.final_items = [raw_item_to_dict(item) for item in final_items]
++
++    def as_dict(self) -> dict[str, Any]:
++        reason_counts = Counter(str(event.get("reason") or "unknown") for event in self.candidate_decisions)
++        status_counts = Counter(str(event.get("status") or "unknown") for event in self.candidate_decisions)
++        final_domains = Counter(source_domain(item.get("url"), item.get("source_name")) for item in self.final_items)
++        return {
++            "schema_version": "search_run_v1",
++            "run_id": self.run_id,
++            "topic": self.topic,
++            "normalized_topic": self.normalized_topic,
++            "topic_kind": self.topic_kind,
++            "from_dt": _iso(self.from_dt),
++            "to_dt": _iso(self.to_dt),
++            "created_at": _iso(self.created_at),
++            "finished_at": _iso(self.finished_at),
++            "status": self.status,
++            "query_variants": list(self.query_variants),
++            "settings": dict(self.settings),
++            "pass_stats": list(self.pass_stats),
++            "raw_candidates": list(self.raw_candidates),
++            "candidate_decisions": list(self.candidate_decisions),
++            "final_items": list(self.final_items),
++            "summary": {
++                "raw_count": len(self.raw_candidates),
++                "decision_count": len(self.candidate_decisions),
++                "final_count": len(self.final_items),
++                "status_counts": dict(status_counts),
++                "reason_counts": dict(reason_counts.most_common()),
++                "final_domains": dict(final_domains),
++            },
++        }
++
++
++class SearchRunRecorder:
++    def __init__(self, *, enabled: bool, directory: str | Path) -> None:
++        self.enabled = enabled
++        self.directory = Path(directory)
++
++    def start(
++        self,
++        *,
++        topic: str,
++        normalized_topic: str,
++        topic_kind: str,
++        from_dt: datetime,
++        to_dt: datetime,
++        query_variants: list[str],
++        settings: dict[str, Any],
++    ) -> SearchRunRecord | None:
++        if not self.enabled:
++            return None
++        now = datetime.now(tz=timezone.utc)
++        run_id = f"{now.strftime('%Y%m%dT%H%M%SZ')}-{_safe_slug(topic, limit=32)}-{abs(hash((topic, now.timestamp()))) % 100000:05d}"
++        return SearchRunRecord(
++            run_id=run_id,
++            topic=topic,
++            normalized_topic=normalized_topic,
++            topic_kind=topic_kind,
++            from_dt=from_dt,
++            to_dt=to_dt,
++            query_variants=query_variants,
++            settings=settings,
++        )
++
++    def write(self, record: SearchRunRecord | None) -> Path | None:
++        if record is None or not self.enabled:
++            return None
++        self.directory.mkdir(parents=True, exist_ok=True)
++        path = self.directory / f"{record.run_id}.json"
++        tmp = path.with_suffix(".json.tmp")
++        tmp.write_text(json.dumps(record.as_dict(), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
++        tmp.replace(path)
++        return path
++
++
++def decision_event_from_candidate(
++    *,
++    source: str,
++    topic: str,
++    topic_kind: str,
++    status: str,
++    reason: str,
++    score: int | float | None,
++    directness_score: int | float | None,
++    article_confidence: int | float | None,
++    freshness_verified: bool | None,
++    published_at_source: str | None,
++    published_at: datetime | None,
++    age_hours: float | None,
++    url: str | None,
++    title: str | None,
++    pass_index: int | None = None,
++    query: str | None = None,
++) -> dict[str, Any]:
++    return {
++        "source": source,
++        "topic": topic,
++        "topic_kind": topic_kind,
++        "status": status,
++        "reason": reason,
++        "score": score,
++        "directness_score": directness_score,
++        "article_confidence": article_confidence,
++        "freshness_verified": freshness_verified,
++        "published_at_source": published_at_source,
++        "published_at": _iso(published_at),
++        "age_hours": age_hours,
++        "url": url,
++        "title": title,
++        "domain": source_domain(url),
++        "pass_index": pass_index,
++        "query": query,
++    }
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/app/shared/settings.py v63work/app/shared/settings.py
+--- v63base/app/shared/settings.py	2026-04-26 20:35:38.000000000 +0000
++++ v63work/app/shared/settings.py	2026-04-27 11:27:40.222456894 +0000
+@@ -50,6 +50,12 @@
+     # If the user presses "run now" again right after a digest, do not drain stale leftovers.
+     immediate_repeat_guard_minutes: int = 15
+ 
++    # v6.3 evaluation/replay: save raw search candidates and decisions to JSON files.
++    # Use with docker-compose volume ./debug_runs:/app/debug_runs.
++    search_debug_dump_enabled: bool = False
++    search_debug_dump_dir: str = "debug_runs"
++    search_eval_fixture_dir: str = "eval_fixtures"
++
+     enable_openrouter_web_search_source: bool = True
+     enable_mock_source: bool = False
+     enable_telegram_channel_source: bool = False
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/app/tools/benchmark_plan.py v63work/app/tools/benchmark_plan.py
+--- v63base/app/tools/benchmark_plan.py	1970-01-01 00:00:00.000000000 +0000
++++ v63work/app/tools/benchmark_plan.py	2026-04-27 11:29:41.336286745 +0000
+@@ -0,0 +1,69 @@
++from __future__ import annotations
++
++import argparse
++import json
++from datetime import datetime, timedelta, timezone
++from pathlib import Path
++from typing import Any
++
++from app.search_v2.strategy import build_search_plan
++
++
++def load_topics(path: Path) -> list[dict[str, Any]]:
++    rows = []
++    for line in path.read_text(encoding="utf-8").splitlines():
++        line = line.strip()
++        if not line or line.startswith("#"):
++            continue
++        rows.append(json.loads(line))
++    return rows
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(description="Dry-run the universal topic classifier/query planner without calling OpenRouter.")
++    parser.add_argument("--input", default="eval_fixtures/benchmark_topics.jsonl")
++    parser.add_argument("--out", default="debug_runs/benchmark_plan_report.md")
++    parser.add_argument("--json-out", default="debug_runs/benchmark_plan_report.json")
++    args = parser.parse_args()
++
++    now = datetime.now(tz=timezone.utc)
++    rows = load_topics(Path(args.input))
++    report_rows = []
++    lines = ["# Benchmark query-plan report", ""]
++    mismatches = 0
++    for row in rows:
++        plan = build_search_plan(row["topic"], from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++        ok = plan.topic_kind == row.get("expected_kind")
++        if not ok:
++            mismatches += 1
++        report_rows.append({
++            **row,
++            "detected_kind": plan.topic_kind,
++            "normalized_query": plan.normalized_query,
++            "query_variants": plan.query_variants,
++            "required_terms": sorted(plan.required_terms),
++            "soft_terms": sorted(plan.soft_terms),
++            "semantic_hints": sorted(plan.semantic_hints),
++            "matches_expected_kind": ok,
++        })
++        lines.extend([
++            f"## {row['topic']}  `expected={row.get('expected_kind')}`  `detected={plan.topic_kind}`  `ok={ok}`",
++            "",
++            f"- normalized: `{plan.normalized_query}`",
++            f"- acceptable: {row.get('acceptable', '-')}",
++            f"- bad: {row.get('bad', '-')}",
++            "- query variants:",
++        ])
++        for q in plan.query_variants:
++            lines.append(f"  - `{q}`")
++        lines.append("")
++    lines.insert(2, f"Classifier mismatches: **{mismatches}/{len(rows)}**\n")
++    out = Path(args.out)
++    out.parent.mkdir(parents=True, exist_ok=True)
++    out.write_text("\n".join(lines), encoding="utf-8")
++    Path(args.json_out).write_text(json.dumps(report_rows, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
++    print(f"Wrote {out}; mismatches={mismatches}/{len(rows)}")
++
++
++if __name__ == "__main__":
++    main()
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/app/tools/replay_search_run.py v63work/app/tools/replay_search_run.py
+--- v63base/app/tools/replay_search_run.py	1970-01-01 00:00:00.000000000 +0000
++++ v63work/app/tools/replay_search_run.py	2026-04-27 11:29:19.977925915 +0000
+@@ -0,0 +1,159 @@
++from __future__ import annotations
++
++import argparse
++import glob
++import json
++from collections import Counter, defaultdict
++from pathlib import Path
++from typing import Any
++
++
++def _load_json(path: Path) -> dict[str, Any]:
++    return json.loads(path.read_text(encoding="utf-8"))
++
++
++def _fmt_counter(counter: dict[str, int], *, limit: int = 10) -> str:
++    if not counter:
++        return "-"
++    items = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
++    return ", ".join(f"{k}: {v}" for k, v in items)
++
++
++def analyze_run(data: dict[str, Any]) -> dict[str, Any]:
++    decisions = data.get("candidate_decisions") or []
++    raw_candidates = data.get("raw_candidates") or []
++    final_items = data.get("final_items") or []
++    status_counts = Counter(str(d.get("status") or "unknown") for d in decisions)
++    reason_counts = Counter(str(d.get("reason") or "unknown") for d in decisions)
++    domains = Counter(str(d.get("domain") or "unknown") for d in decisions)
++    final_domains = Counter(str((item.get("url") or "").split("/")[2].replace("www.", "") if item.get("url") and "/" in item.get("url") else item.get("source_name") or "unknown") for item in final_items)
++    weak = status_counts.get("weak_but_usable", 0)
++    accepted = status_counts.get("accepted", 0)
++    hard_rejects = sum(v for k, v in status_counts.items() if k not in {"accepted", "weak_but_usable"})
++    return {
++        "run_id": data.get("run_id"),
++        "topic": data.get("topic"),
++        "normalized_topic": data.get("normalized_topic"),
++        "topic_kind": data.get("topic_kind"),
++        "status": data.get("status"),
++        "raw_count": len(raw_candidates),
++        "decision_count": len(decisions),
++        "accepted_count": accepted,
++        "weak_count": weak,
++        "hard_rejects": hard_rejects,
++        "final_count": len(final_items),
++        "status_counts": dict(status_counts),
++        "reason_counts": dict(reason_counts),
++        "candidate_domains": dict(domains),
++        "final_domains": dict(final_domains),
++        "query_variants": data.get("query_variants") or [],
++        "pass_stats": data.get("pass_stats") or [],
++    }
++
++
++def grade_run(summary: dict[str, Any]) -> tuple[str, list[str]]:
++    notes: list[str] = []
++    final_count = int(summary["final_count"])
++    raw_count = int(summary["raw_count"])
++    accepted_count = int(summary["accepted_count"])
++    weak_count = int(summary["weak_count"])
++    reasons = summary.get("reason_counts") or {}
++    if raw_count == 0:
++        notes.append("provider_returned_zero")
++    if raw_count > 0 and final_count == 0:
++        notes.append("filter_or_selection_zeroed_results")
++    if final_count > 0 and accepted_count == 0 and weak_count > 0:
++        notes.append("only_weak_freshness_selected")
++    if reasons.get("topic_news_hub_page") or reasons.get("news_hub_page"):
++        notes.append("hub_pages_present_in_candidates")
++    if reasons.get("review_or_buying_guide"):
++        notes.append("review_or_buying_guide_candidates_present")
++    if reasons.get("outside_hard_freshness_window"):
++        notes.append("old_candidates_present")
++    if final_count >= 3 and accepted_count >= 2:
++        grade = "good"
++    elif final_count >= 1 and (accepted_count >= 1 or weak_count >= 1):
++        grade = "usable"
++    elif raw_count > 0:
++        grade = "retrieval_ok_filter_failed"
++    else:
++        grade = "retrieval_failed"
++    return grade, notes
++
++
++def render_markdown(summaries: list[dict[str, Any]]) -> str:
++    lines = ["# Search replay report", ""]
++    aggregate_grades = Counter()
++    aggregate_reasons = Counter()
++    by_kind: dict[str, Counter[str]] = defaultdict(Counter)
++    for summary in summaries:
++        grade, notes = grade_run(summary)
++        aggregate_grades[grade] += 1
++        by_kind[str(summary.get("topic_kind") or "unknown")][grade] += 1
++        aggregate_reasons.update(summary.get("reason_counts") or {})
++        lines.extend([
++            f"## {summary.get('topic')}  `kind={summary.get('topic_kind')}`  `grade={grade}`",
++            "",
++            f"- run: `{summary.get('run_id')}`",
++            f"- raw candidates: **{summary['raw_count']}**",
++            f"- decisions: **{summary['decision_count']}**",
++            f"- accepted: **{summary['accepted_count']}**, weak: **{summary['weak_count']}**, final selected: **{summary['final_count']}**",
++            f"- statuses: {_fmt_counter(summary.get('status_counts') or {})}",
++            f"- reasons: {_fmt_counter(summary.get('reason_counts') or {})}",
++            f"- final domains: {_fmt_counter(summary.get('final_domains') or {})}",
++            f"- notes: {', '.join(notes) if notes else '-'}",
++            "",
++        ])
++    lines.extend([
++        "# Aggregate",
++        "",
++        f"- runs: **{len(summaries)}**",
++        f"- grades: {_fmt_counter(dict(aggregate_grades))}",
++        f"- top rejection reasons: {_fmt_counter(dict(aggregate_reasons), limit=15)}",
++        "",
++        "## By topic kind",
++        "",
++    ])
++    for kind, counter in sorted(by_kind.items()):
++        lines.append(f"- `{kind}`: {_fmt_counter(dict(counter))}")
++    lines.append("")
++    return "\n".join(lines)
++
++
++def expand_inputs(inputs: list[str]) -> list[Path]:
++    paths: list[Path] = []
++    for item in inputs:
++        matches = [Path(p) for p in glob.glob(item)]
++        if matches:
++            paths.extend(matches)
++        else:
++            paths.append(Path(item))
++    unique = []
++    seen = set()
++    for path in paths:
++        if path in seen or not path.exists() or path.suffix.lower() != ".json":
++            continue
++        unique.append(path)
++        seen.add(path)
++    return sorted(unique)
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(description="Analyze saved v6.3 search run JSON files without spending OpenRouter credits.")
++    parser.add_argument("inputs", nargs="+", help="Run JSON files or globs, e.g. debug_runs/*.json")
++    parser.add_argument("--out", default="debug_runs/replay_report.md", help="Markdown output path")
++    parser.add_argument("--json-out", default=None, help="Optional JSON summary output path")
++    args = parser.parse_args()
++
++    paths = expand_inputs(args.inputs)
++    summaries = [analyze_run(_load_json(path)) for path in paths]
++    out = Path(args.out)
++    out.parent.mkdir(parents=True, exist_ok=True)
++    out.write_text(render_markdown(summaries), encoding="utf-8")
++    if args.json_out:
++        Path(args.json_out).write_text(json.dumps(summaries, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
++    print(f"Analyzed {len(summaries)} run(s). Report: {out}")
++
++
++if __name__ == "__main__":
++    main()
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/docker-compose.yml v63work/docker-compose.yml
+--- v63base/docker-compose.yml	2026-04-25 18:07:20.000000000 +0000
++++ v63work/docker-compose.yml	2026-04-27 11:27:40.223754775 +0000
+@@ -8,6 +8,9 @@
+     command: uvicorn app.main:create_app --factory --host 0.0.0.0 --port 8000
+     ports:
+       - "8000:8000"
++    volumes:
++      - ./debug_runs:/app/debug_runs
++      - ./eval_fixtures:/app/eval_fixtures
+     depends_on:
+       postgres:
+         condition: service_healthy
+@@ -22,6 +25,9 @@
+     env_file:
+       - .env
+     command: python -m app.scheduler_runner
++    volumes:
++      - ./debug_runs:/app/debug_runs
++      - ./eval_fixtures:/app/eval_fixtures
+     depends_on:
+       postgres:
+         condition: service_healthy
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/eval_fixtures/benchmark_topics.jsonl v63work/eval_fixtures/benchmark_topics.jsonl
+--- v63base/eval_fixtures/benchmark_topics.jsonl	1970-01-01 00:00:00.000000000 +0000
++++ v63work/eval_fixtures/benchmark_topics.jsonl	2026-04-27 11:29:41.271613641 +0000
+@@ -0,0 +1,16 @@
++{"topic":"Real Madrid","expected_kind":"sports_team","acceptable":"matches, transfers, injuries, coach/manager, LaLiga/Champions League","bad":"old rumors, random fan pages, unrelated Madrid city news"}
++{"topic":"Barcelona FC","expected_kind":"sports_team","acceptable":"matches, transfers, injuries, coach/manager, LaLiga/Champions League","bad":"Barcelona city travel/local news"}
++{"topic":"Lexus","expected_kind":"brand_company","acceptable":"recalls, safety notices, production, model launches, business/earnings","bad":"week-long reviews, buyer guides, price pages"}
++{"topic":"Audi","expected_kind":"brand_company","acceptable":"recalls, production, launches, business, safety","bad":"buyer guides, dealership pages, old reviews"}
++{"topic":"Dyson","expected_kind":"brand_company","acceptable":"product launches, company news, lawsuits, recalls, business","bad":"shopping pages, coupon pages, how-to guides"}
++{"topic":"Universal Pictures","expected_kind":"entertainment_company","acceptable":"release slate, box office, studio deals, lawsuits, production news","bad":"generic biographies, weak aggregators, old movie pages"}
++{"topic":"Leonardo DiCaprio","expected_kind":"person","acceptable":"recent interviews, projects, legal/public statements, appearances","bad":"evergreen biography, old movie rankings"}
++{"topic":"Pavel Durov","expected_kind":"person","acceptable":"Telegram-related statements, legal/political news, company updates","bad":"generic Telegram tutorials"}
++{"topic":"Kyiv","expected_kind":"city","acceptable":"current city-specific events in Kyiv/Kyiv region","bad":"generic Ukraine news with no Kyiv angle"}
++{"topic":"Lviv","expected_kind":"city","acceptable":"current city/regional events in Lviv/Lviv oblast","bad":"generic Ukraine news with no Lviv angle"}
++{"topic":"Paris","expected_kind":"city","acceptable":"Paris city news, governance, transport, incidents, major events","bad":"Paris Hilton, Paris Texas, evergreen travel guides"}
++{"topic":"bitcoin","expected_kind":"crypto","acceptable":"market-moving BTC news, regulation, ETF, mining, security, major business moves","bad":"price pages, generic quote pages, evergreen explainers"}
++{"topic":"Ethereum","expected_kind":"crypto","acceptable":"ETH regulation, protocol, market, ETF, security, ecosystem news","bad":"generic price pages or old explainers"}
++{"topic":"Microsoft","expected_kind":"brand_company","acceptable":"earnings, AI/product launches, regulation, layoffs, deals, security","bad":"Microsoft News hub pages, how-to Windows tutorials"}
++{"topic":"NAVI TEAM","expected_kind":"team_org","acceptable":"esports roster, tournament, match, organization news","bad":"generic team building, unrelated sports teams"}
++{"topic":"CS","expected_kind":"ambiguous_acronym","acceptable":"should ask/require context or select Counter-Strike only with CS2/esports context","bad":"computer science/Twin Cities/customer success mixed into digest"}
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v63base/tests/test_quality_engine_v63_eval_replay.py v63work/tests/test_quality_engine_v63_eval_replay.py
+--- v63base/tests/test_quality_engine_v63_eval_replay.py	1970-01-01 00:00:00.000000000 +0000
++++ v63work/tests/test_quality_engine_v63_eval_replay.py	2026-04-27 11:30:04.156413393 +0000
+@@ -0,0 +1,81 @@
++from __future__ import annotations
++
++import json
++from datetime import datetime, timezone
++
++from app.search_v2.recorder import SearchRunRecorder, decision_event_from_candidate
++from app.tools.replay_search_run import analyze_run, grade_run, render_markdown
++from app.schemas.sources import RawSourceItem
++from app.domain.enums import SourceType
++
++
++def test_search_run_recorder_writes_replayable_json(tmp_path):
++    recorder = SearchRunRecorder(enabled=True, directory=tmp_path)
++    now = datetime(2026, 4, 27, tzinfo=timezone.utc)
++    record = recorder.start(
++        topic="bitcoin",
++        normalized_topic="bitcoin",
++        topic_kind="crypto",
++        from_dt=now,
++        to_dt=now,
++        query_variants=["bitcoin latest news"],
++        settings={"budget_usd": 0.07},
++    )
++    assert record is not None
++    raw = RawSourceItem(
++        source_type=SourceType.WEB_SEARCH,
++        provider="openrouter_web_search",
++        url="https://example.com/news/2026/04/27/bitcoin-test",
++        title="Bitcoin test news",
++        description="A direct bitcoin test story",
++        source_name="example.com",
++        published_at=None,
++        metadata={"search_annotation": True},
++    )
++    record.add_pass(pass_index=1, query="bitcoin latest news", raw_items=[raw], accepted_count=1, merged_count=1)
++    record.add_decision(
++        decision_event_from_candidate(
++            source="openrouter_web_search",
++            topic="bitcoin",
++            topic_kind="crypto",
++            status="accepted",
++            reason="accepted_verified",
++            score=30,
++            directness_score=25,
++            article_confidence=5,
++            freshness_verified=True,
++            published_at=now,
++            published_at_source="metadata",
++            age_hours=0.0,
++            url="https://example.com/news/2026/04/27/bitcoin-test",
++            title="Bitcoin test news",
++            pass_index=1,
++            query="bitcoin latest news",
++        )
++    )
++    record.finish(status="success", final_items=[raw])
++    path = recorder.write(record)
++    assert path is not None and path.exists()
++    data = json.loads(path.read_text(encoding="utf-8"))
++    assert data["schema_version"] == "search_run_v1"
++    assert data["summary"]["raw_count"] == 1
++    assert data["summary"]["final_count"] == 1
++
++
++def test_replay_analysis_grades_filter_failure():
++    data = {
++        "run_id": "r1",
++        "topic": "Kyiv",
++        "topic_kind": "city",
++        "status": "empty",
++        "raw_candidates": [{"url": "https://example.com/a", "source_name": "example.com"}],
++        "candidate_decisions": [
++            {"status": "rejected", "reason": "missing_publish_date_not_usable", "domain": "example.com"}
++        ],
++        "final_items": [],
++    }
++    summary = analyze_run(data)
++    grade, notes = grade_run(summary)
++    assert grade == "retrieval_ok_filter_failed"
++    assert "filter_or_selection_zeroed_results" in notes
++    assert "missing_publish_date_not_usable" in render_markdown([summary])

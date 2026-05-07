@@ -1,0 +1,1128 @@
+--- v5/.env.example
++++ v5.1/.env.example
+@@ -22,6 +22,11 @@
+ OPENROUTER_MIN_QUALITY_CANDIDATES=4
+ OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
+ OPENROUTER_DEBUG_REJECTIONS=true
++OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
++OPENROUTER_REQUIRE_VERIFIED_PUBLISH_DATE=true
++OPENROUTER_ALLOW_WEAK_PUBLISH_DATES=false
++OPENROUTER_ALLOW_UNDATED_FALLBACK=false
++OPENROUTER_FUTURE_SKEW_HOURS=12
+ ENABLE_OPENROUTER_WEB_SEARCH_SOURCE=true
+ ENABLE_MOCK_SOURCE=false
+ ENABLE_TELEGRAM_CHANNEL_SOURCE=false
+--- v5/app/infrastructure/sources/openrouter_web_search.py
++++ v5.1/app/infrastructure/sources/openrouter_web_search.py
+@@ -72,6 +72,11 @@
+         self._min_quality_candidates = max(settings.openrouter_min_quality_candidates, 1)
+         self._allow_plugin_fallback = settings.openrouter_allow_plugin_fallback
+         self._debug_rejections = settings.openrouter_debug_rejections
++        self._max_article_age_hours = max(settings.openrouter_max_article_age_hours, 1)
++        self._require_verified_publish_date = settings.openrouter_require_verified_publish_date
++        self._allow_weak_publish_dates = settings.openrouter_allow_weak_publish_dates
++        self._allow_undated_fallback = settings.openrouter_allow_undated_fallback
++        self._future_skew_hours = max(settings.openrouter_future_skew_hours, 0)
+ 
+     async def fetch(
+         self,
+@@ -174,9 +179,10 @@
+                 {
+                     "role": "system",
+                     "content": (
+-                        "You are a news discovery assistant. Search the web for recent news articles on the given topic. "
+-                        "Prefer authoritative journalism and recent reporting. If multiple languages cover the same story, prefer "
+-                        "English then German. In your answer, keep it short and cite each result."
++                        "You are a news discovery assistant. Search the web for genuinely recent news articles on the given topic. "
++                        "Prefer authoritative journalism and recent reporting with a visible publication date. Do not return old archive articles, "
++                        "evergreen pages, stale explainers, or pages whose publication date is outside the requested window. If multiple languages "
++                        "cover the same story, prefer English then German. In your answer, keep it short and cite each result."
+                     ),
+                 },
+                 {
+@@ -185,8 +191,9 @@
+                         f"Topic: {query}\n"
+                         f"Time window start: {from_dt.isoformat()}\n"
+                         f"Time window end: {to_dt.isoformat()}\n"
+-                        f"Return up to {limit} recent news article links only with short one-line reasons. "
+-                        "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, stock-analysis pages, and generic news-hub pages."
++                        f"Return up to {limit} news article links published within this exact window only. "
++                        "If the publication date is missing or probably older than the start time, omit the result. "
++                        "Use short one-line reasons. Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, and generic news-hub pages."
+                     ),
+                 },
+             ],
+@@ -217,8 +224,8 @@
+                 {
+                     "role": "system",
+                     "content": (
+-                        "You are a news discovery assistant. Find recent news article links for the given topic. "
+-                        "Prefer authoritative sources and cite each result. Only return recent hard-news article URLs that fit the requested time window."
++                        "You are a news discovery assistant. Find genuinely recent news article links for the given topic. "
++                        "Prefer authoritative sources with visible publication dates and cite each result. Only return hard-news article URLs published inside the requested time window."
+                     ),
+                 },
+                 {
+@@ -227,8 +234,9 @@
+                         f"Topic: {query}\n"
+                         f"Time window start: {from_dt.isoformat()}\n"
+                         f"Time window end: {to_dt.isoformat()}\n"
+-                        f"Return up to {limit} recent news article links only. "
+-                        "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, stock-analysis pages, and generic news-hub pages."
++                        f"Return up to {limit} news article links published within this exact window only. "
++                        "If the publication date is missing or probably older than the start time, omit the result. "
++                        "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, and generic news-hub pages."
+                     ),
+                 },
+             ],
+@@ -325,7 +333,8 @@
+         plan,
+     ) -> list[RawSourceItem]:
+         enriched: list[RawSourceItem] = []
+-        freshness_floor = from_dt if getattr(plan, "first_run", False) else max(from_dt, to_dt - timedelta(hours=48))
++        freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
++        future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
+         async with httpx.AsyncClient(timeout=min(self._timeout_seconds, 15.0), follow_redirects=True) as client:
+             for item in items:
+                 url = str(item.url) if item.url is not None else None
+@@ -335,39 +344,64 @@
+                 try:
+                     response = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                     if response.status_code >= 400:
+-                        fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason=f"http_{response.status_code}")
++                        fallback = self._fallback_candidate(
++                            item,
++                            from_dt=from_dt,
++                            to_dt=to_dt,
++                            plan=plan,
++                            reason=f"http_{response.status_code}",
++                        )
+                         if fallback is not None:
+                             enriched.append(fallback)
+                         continue
+                 except Exception as exc:
+-                    fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason=type(exc).__name__)
++                    fallback = self._fallback_candidate(
++                        item,
++                        from_dt=from_dt,
++                        to_dt=to_dt,
++                        plan=plan,
++                        reason=type(exc).__name__,
++                    )
+                     if fallback is not None:
+                         enriched.append(fallback)
+                     continue
+ 
+                 meta = extract_html_metadata(response.text)
+                 canonical_url = meta.canonical_url or self._extract_canonical_url(response.text) or str(response.url)
+-                published_at = self._extract_published_at(response.text)
++                candidate_title = meta.title or item.title
++                candidate_desc = meta.description or item.description
++
++                published_at, published_source = self._extract_best_publish_datetime(
++                    html=response.text,
++                    canonical_url=canonical_url,
++                    last_modified=response.headers.get("last-modified"),
++                )
+                 if published_at is None:
+-                    published_at = self._extract_date_from_url(canonical_url)
+-                if published_at is None:
+-                    published_at = self._extract_last_modified(response.headers.get("last-modified"))
+-                if published_at is None and plan.first_run:
+-                    published_at = to_dt
+-                if published_at is None:
+-                    fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason="missing_publish_date")
+-                    if fallback is not None:
+-                        enriched.append(fallback)
++                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "missing_verified_publish_date")
+                     continue
+                 if published_at.tzinfo is None:
+                     published_at = published_at.replace(tzinfo=timezone.utc)
+                 published_at = published_at.astimezone(timezone.utc)
++
+                 if published_at < freshness_floor:
+-                    self._log_rejection(plan, canonical_url, meta.title or item.title, meta.description or item.description, "outside_freshness_window")
+-                    continue
+-
+-                candidate_title = meta.title or item.title
+-                candidate_desc = meta.description or item.description
++                    self._log_rejection(
++                        plan,
++                        canonical_url,
++                        candidate_title,
++                        candidate_desc,
++                        f"outside_freshness_window:{published_source}:{published_at.isoformat()}",
++                    )
++                    continue
++                if published_at > future_ceiling:
++                    self._log_rejection(
++                        plan,
++                        canonical_url,
++                        candidate_title,
++                        candidate_desc,
++                        f"future_publish_date:{published_source}:{published_at.isoformat()}",
++                    )
++                    continue
++
+                 source_language = item.source_language or meta.language or self._extract_language(response.text)
+                 parsed_url = self._safe_http_url(canonical_url)
+                 if parsed_url is None or not self._looks_like_news_article(canonical_url, candidate_title):
+@@ -395,24 +429,62 @@
+                         "directness_score": quality.directness_score,
+                         "article_confidence": article_confidence(canonical_url, candidate_title, candidate_desc),
+                         "quality_reason": "accepted",
++                        "published_at_source": published_source,
++                        "freshness_verified": published_source in {"metadata", "url"},
++                        "freshness_floor": freshness_floor.isoformat(),
+                     },
+                 }))
+         enriched.sort(key=lambda x: (int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
+         return enriched
+ 
+-    def _fallback_candidate(self, item: RawSourceItem, *, to_dt: datetime, plan, reason: str) -> RawSourceItem | None:
++    def _fallback_candidate(
++        self,
++        item: RawSourceItem,
++        *,
++        from_dt: datetime,
++        to_dt: datetime,
++        plan,
++        reason: str,
++    ) -> RawSourceItem | None:
+         url = str(item.url) if item.url is not None else None
+         if not url:
+             return None
+         if not self._looks_like_news_article(url, item.title):
+             self._log_rejection(plan, url, item.title, item.description, f"fallback_not_article:{reason}")
+             return None
++
++        url_date = self._extract_date_from_url(url)
++        if url_date is None:
++            if self._require_verified_publish_date and not self._allow_undated_fallback:
++                self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
++                return None
++            if not self._allow_undated_fallback:
++                self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
++                return None
++            published_at = to_dt
++            published_source = "fallback_unverified"
++        else:
++            published_at = url_date
++            published_source = "url"
++
++        if published_at.tzinfo is None:
++            published_at = published_at.replace(tzinfo=timezone.utc)
++        published_at = published_at.astimezone(timezone.utc)
++        freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
++        future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
++        if published_at < freshness_floor:
++            self._log_rejection(plan, url, item.title, item.description, f"fallback_outside_freshness_window:{published_source}:{published_at.isoformat()}")
++            return None
++        if published_at > future_ceiling:
++            self._log_rejection(plan, url, item.title, item.description, f"fallback_future_publish_date:{published_source}:{published_at.isoformat()}")
++            return None
++
+         quality = candidate_quality(plan, url=url, title=item.title, description=item.description)
+         if not quality.accepted or quality.directness_score < plan.minimum_directness + 2:
+             self._log_rejection(plan, url, item.title, item.description, quality.reason or f"fallback_rejected:{reason}")
+             return None
+         return item.model_copy(update={
+-            "published_at": to_dt,
++            "published_at": published_at,
+             "metadata": {
+                 **item.metadata,
+                 "canonical_url": url,
+@@ -421,8 +493,47 @@
+                 "article_confidence": article_confidence(url, item.title, item.description),
+                 "metadata_fallback": True,
+                 "metadata_fallback_reason": reason,
++                "published_at_source": published_source,
++                "freshness_verified": published_source == "url",
++                "freshness_floor": freshness_floor.isoformat(),
+             },
+         })
++
++    def _freshness_floor(self, *, from_dt: datetime, to_dt: datetime, plan) -> datetime:
++        floor = from_dt
++        max_age_floor = to_dt - timedelta(hours=self._max_article_age_hours)
++        if max_age_floor > floor:
++            floor = max_age_floor
++        # Follow-up runs should be stricter, because sending stale leftovers as "latest" feels broken.
++        if not getattr(plan, "first_run", False):
++            followup_floor = to_dt - timedelta(hours=min(48, self._max_article_age_hours))
++            if followup_floor > floor:
++                floor = followup_floor
++        if floor.tzinfo is None:
++            floor = floor.replace(tzinfo=timezone.utc)
++        return floor.astimezone(timezone.utc)
++
++    def _extract_best_publish_datetime(
++        self,
++        *,
++        html: str,
++        canonical_url: str,
++        last_modified: str | None,
++    ) -> tuple[datetime | None, str | None]:
++        published_at = self._extract_published_at(html)
++        if published_at is not None:
++            return published_at, "metadata"
++
++        published_at = self._extract_date_from_url(canonical_url)
++        if published_at is not None:
++            return published_at, "url"
++
++        if not self._require_verified_publish_date or self._allow_weak_publish_dates:
++            published_at = self._extract_last_modified(last_modified)
++            if published_at is not None:
++                return published_at, "last_modified"
++
++        return None, None
+ 
+     def _log_rejection(self, plan, url: str, title: str | None, description: str | None, reason: str) -> None:
+         if not self._debug_rejections:
+--- v5/app/search_v2/strategy.py
++++ v5.1/app/search_v2/strategy.py
+@@ -161,10 +161,16 @@
+ 
+ 
+ def _freshness_hint(from_dt: datetime, to_dt: datetime, first_run: bool) -> str:
+-    if first_run:
+-        return "recent news"
+     hours = max(int((to_dt - from_dt).total_seconds() // 3600), 1)
+-    return "past 24 hours" if hours <= 30 else "past 48 hours"
++    since = from_dt.strftime("%Y-%m-%d")
++    if hours <= 30:
++        return f"past 24 hours published after {since}"
++    if hours <= 54:
++        return f"past 48 hours published after {since}"
++    if hours <= 96:
++        return f"past 72 hours published after {since}"
++    # First runs can use a wider window, but never a vague "recent" query.
++    return f"past {max(1, hours // 24)} days published after {since}"
+ 
+ 
+ def _semantic_hints_for_query(q: str, kind: str) -> set[str]:
+--- v5/app/shared/settings.py
++++ v5.1/app/shared/settings.py
+@@ -29,6 +29,11 @@
+     openrouter_min_quality_candidates: int = 4
+     openrouter_allow_plugin_fallback: bool = False
+     openrouter_debug_rejections: bool = True
++    openrouter_max_article_age_hours: int = 168
++    openrouter_require_verified_publish_date: bool = True
++    openrouter_allow_weak_publish_dates: bool = False
++    openrouter_allow_undated_fallback: bool = False
++    openrouter_future_skew_hours: int = 12
+ 
+     enable_openrouter_web_search_source: bool = True
+     enable_mock_source: bool = False
+--- v5/tests/test_source_collection.py
++++ v5.1/tests/test_source_collection.py
+@@ -44,4 +44,8 @@
+     now = datetime.now(tz=UTC)
+     queries = OpenRouterWebSearchSource._build_queries("BMW", now - timedelta(hours=24), now)
+     joined = " ".join(queries).lower()
+-    assert "7 series" in joined or "i7" in joined
++    # Universal quality engine should not hard-code model names for one brand.
++    # It should keep brand queries news/business-oriented and date-bounded.
++    assert "bmw" in joined
++    assert "published after" in joined
++    assert "reuters" in joined or "bloomberg" in joined or "cnbc" in joined
+--- /dev/null
++++ v5.1/CHANGED_FILES_V5_1.md
+@@ -0,0 +1,19 @@
++# Changed files in v5.1
++
++Modified:
++- `.env.example`
++- `app/infrastructure/sources/openrouter_web_search.py`
++- `app/search_v2/strategy.py`
++- `app/shared/settings.py`
++- `tests/test_source_collection.py`
++
++Added:
++- `CHANGED_FILES_V5_1.md`
++- `MANIFEST_V5_1_AFTER.txt`
++- `MANIFEST_V5_BEFORE_V51.txt`
++- `PATCH_V5_TO_V5_1.diff`
++- `QUALITY_ENGINE_V5_1_FRESHNESS_RU.md`
++- `REMOVED_FILES_V5_1.md`
++- `TEST_REPORT_V5_1.md`
++- `tests/test_freshness_guard_v51.py`
++
+--- /dev/null
++++ v5.1/MANIFEST_V5_1_AFTER.txt
+@@ -0,0 +1,110 @@
++294d73d61a0e     1301  .env.example
++e717d35e1020      773  CHANGED_FILES.md
++654c9efd527a      248  CHANGED_FILES_V5_1.md
++9a3a423e2b40     3116  MANIFEST_AFTER.txt
++585a6d3f518e     2951  MANIFEST_BEFORE.txt
++54fadc6424b8     5519  MANIFEST_V5_1_AFTER.txt
++d8adb8cf914a     5462  MANIFEST_V5_BEFORE_V51.txt
++c3bf8f7a70a7    61286  PATCH.diff
++d25c7155a027    20074  PATCH_V5_TO_V5_1.diff
++e871dfee68ea     3932  QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++6a9d86dec3a2     4035  QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++28f13a384501     4447  README.md
++8738f934232b       26  REMOVED_FILES.md
++ee208e15834b       51  REMOVED_FILES_V5_1.md
++c878b7031b4f     1992  START_HERE_RU.md
++eb50ef4d1ec8     2198  TECHNICAL_DECISIONS.md
++9f422cc7fb6d     1173  TEST_REPORT.md
++061f136941b1      379  TEST_REPORT_V5_1.md
++e3b0c44298fc        0  app/__init__.py
++e3b0c44298fc        0  app/api/__init__.py
++e3b0c44298fc        0  app/api/routes/__init__.py
++01215bf399d8     2339  app/api/routes/internal.py
++f76ae940ebca      788  app/api/routes/telegram.py
++e3b0c44298fc        0  app/application/__init__.py
++e3b0c44298fc        0  app/application/services/__init__.py
++11e56f512a1c     7571  app/application/services/deduplication.py
++bc5d2a112df2     2238  app/application/services/source_collection.py
++55f73cb2a153    13851  app/application/services/topic_processing.py
++e3b0c44298fc        0  app/bot/__init__.py
++7984685c9757     2693  app/bot/application.py
++e3b0c44298fc        0  app/bot/handlers/__init__.py
++76bbf3e10200      993  app/bot/handlers/callbacks.py
++d65d16973baa     4636  app/bot/handlers/channels.py
++93d824103e02      667  app/bot/handlers/start.py
++2bec4912e607    14209  app/bot/handlers/topic_creation.py
++f88bbc3f96b7     9169  app/bot/handlers/topics_list.py
++e3b0c44298fc        0  app/bot/keyboards/__init__.py
++458e534aa376      362  app/bot/keyboards/channels.py
++b3b691c95ee9      770  app/bot/keyboards/main_menu.py
++4e0ecd9fcd2c     1482  app/bot/keyboards/topic_creation.py
++16167344dd4a      492  app/bot/keyboards/topic_details.py
++490f418259e4     1055  app/bot/keyboards/topics_list.py
++e3b0c44298fc        0  app/domain/__init__.py
++7359ab1da36e      756  app/domain/enums.py
++e3b0c44298fc        0  app/domain/policies/__init__.py
++87e624a3f833     1785  app/domain/policies/normalization.py
++be6e6213b939     7824  app/domain/policies/ranking.py
++1e28e9300c03      569  app/domain/value_objects.py
++e3b0c44298fc        0  app/infrastructure/__init__.py
++e3b0c44298fc        0  app/infrastructure/db/__init__.py
++90066b28d65e      346  app/infrastructure/db/base.py
++1177fbd22b7c     7169  app/infrastructure/db/models.py
++1d74ce50d81e     1297  app/infrastructure/db/session.py
++e3b0c44298fc        0  app/infrastructure/llm/__init__.py
++ef744aa4f1f0      955  app/infrastructure/llm/base.py
++c382d644013c     5138  app/infrastructure/llm/openrouter.py
++e3b0c44298fc        0  app/infrastructure/providers/__init__.py
++e3b0c44298fc        0  app/infrastructure/providers/news/__init__.py
++95dbe7a185ee      317  app/infrastructure/providers/news/base.py
++0b354bf4c479      307  app/infrastructure/providers/news/factory.py
++d0db04d5d7eb      614  app/infrastructure/providers/news/mock.py
++e3b0c44298fc        0  app/infrastructure/repositories/__init__.py
++3780e574a259      508  app/infrastructure/repositories/channels.py
++843ff6e4defd     1254  app/infrastructure/repositories/job_runs.py
++3d9c2c8f044c     3403  app/infrastructure/repositories/sent_stories.py
++98b434b4f14f     1399  app/infrastructure/repositories/stories.py
++17c26b3596bb      776  app/infrastructure/repositories/topics.py
++9cd765d06804      493  app/infrastructure/repositories/users.py
++e3b0c44298fc        0  app/infrastructure/scheduler/__init__.py
++924eca3d5a4f     6612  app/infrastructure/scheduler/service.py
++75ad4f4c2943       13  app/infrastructure/sources/__init__.py
++2cf1c92fe019      390  app/infrastructure/sources/base.py
++39ed3f013dcc     1009  app/infrastructure/sources/factory.py
++7c1f9f4c67e3      749  app/infrastructure/sources/mock.py
++fcfaf365ecd7    31074  app/infrastructure/sources/openrouter_web_search.py
++7ddd092e2203      361  app/infrastructure/sources/registry.py
++d07ebd801881      475  app/infrastructure/sources/rss.py
++f103c30f2ced      526  app/infrastructure/sources/telegram_channel.py
++e3b0c44298fc        0  app/infrastructure/telegram/__init__.py
++46785f053470     1032  app/infrastructure/telegram/callbacks.py
++65c143a1de1e     1258  app/infrastructure/telegram/publisher.py
++849df429827a      221  app/infrastructure/telegram/service_messages.py
++f3e0497436f9     1007  app/main.py
++6e4ef965b2b1      533  app/scheduler_runner.py
++8879f40b749b      276  app/schemas/__init__.py
++57a132efdbc1      604  app/schemas/articles.py
++cd09bc2751b5      624  app/schemas/discovery.py
++cae2e2460f27      484  app/schemas/llm.py
++44a484d477ca      726  app/schemas/publishing.py
++100b72d518ea     1169  app/schemas/sources.py
++80ab877d1eed      423  app/schemas/topics.py
++ed58d05be430      216  app/search_v2/__init__.py
++6273bea2d7f8    13202  app/search_v2/article_filter.py
++41cac2da5486    17525  app/search_v2/strategy.py
++e3b0c44298fc        0  app/shared/__init__.py
++686a9a4f11f9     1750  app/shared/logging.py
++801e1aacd453     2120  app/shared/settings.py
++dd1536cb52a9     1165  docker-compose.yml
++e2504a2824fd      298  docker/app/Dockerfile
++5365d83d843f     1208  pyproject.toml
++d0a5179e44e0      180  tests/conftest.py
++52cc9912ef57     1912  tests/test_deduplication.py
++ac7414a53269     2602  tests/test_disambiguation_diversity.py
++f0a89158a791     2277  tests/test_freshness_guard_v51.py
++56d68178607c      228  tests/test_normalization.py
++110ae3b0328c     2309  tests/test_quality_engine_v5.py
++4c2bf16d36a0     3228  tests/test_quality_filters.py
++8454e4af87be     1078  tests/test_ranking.py
++60e35e75f042     2782  tests/test_search_v2.py
++11f043f31265     1851  tests/test_source_collection.py
+--- /dev/null
++++ v5.1/MANIFEST_V5_BEFORE_V51.txt
+@@ -0,0 +1,102 @@
++a3c8e0fcbcdc     1104  .env.example
++e717d35e1020      773  CHANGED_FILES.md
++9a3a423e2b40     3116  MANIFEST_AFTER.txt
++585a6d3f518e     2951  MANIFEST_BEFORE.txt
++c3bf8f7a70a7    61286  PATCH.diff
++6a9d86dec3a2     4035  QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++28f13a384501     4447  README.md
++8738f934232b       26  REMOVED_FILES.md
++c878b7031b4f     1992  START_HERE_RU.md
++eb50ef4d1ec8     2198  TECHNICAL_DECISIONS.md
++9f422cc7fb6d     1173  TEST_REPORT.md
++e3b0c44298fc        0  app/__init__.py
++e3b0c44298fc        0  app/api/__init__.py
++e3b0c44298fc        0  app/api/routes/__init__.py
++01215bf399d8     2339  app/api/routes/internal.py
++f76ae940ebca      788  app/api/routes/telegram.py
++e3b0c44298fc        0  app/application/__init__.py
++e3b0c44298fc        0  app/application/services/__init__.py
++11e56f512a1c     7571  app/application/services/deduplication.py
++bc5d2a112df2     2238  app/application/services/source_collection.py
++55f73cb2a153    13851  app/application/services/topic_processing.py
++e3b0c44298fc        0  app/bot/__init__.py
++7984685c9757     2693  app/bot/application.py
++e3b0c44298fc        0  app/bot/handlers/__init__.py
++76bbf3e10200      993  app/bot/handlers/callbacks.py
++d65d16973baa     4636  app/bot/handlers/channels.py
++93d824103e02      667  app/bot/handlers/start.py
++2bec4912e607    14209  app/bot/handlers/topic_creation.py
++f88bbc3f96b7     9169  app/bot/handlers/topics_list.py
++e3b0c44298fc        0  app/bot/keyboards/__init__.py
++458e534aa376      362  app/bot/keyboards/channels.py
++b3b691c95ee9      770  app/bot/keyboards/main_menu.py
++4e0ecd9fcd2c     1482  app/bot/keyboards/topic_creation.py
++16167344dd4a      492  app/bot/keyboards/topic_details.py
++490f418259e4     1055  app/bot/keyboards/topics_list.py
++e3b0c44298fc        0  app/domain/__init__.py
++7359ab1da36e      756  app/domain/enums.py
++e3b0c44298fc        0  app/domain/policies/__init__.py
++87e624a3f833     1785  app/domain/policies/normalization.py
++be6e6213b939     7824  app/domain/policies/ranking.py
++1e28e9300c03      569  app/domain/value_objects.py
++e3b0c44298fc        0  app/infrastructure/__init__.py
++e3b0c44298fc        0  app/infrastructure/db/__init__.py
++90066b28d65e      346  app/infrastructure/db/base.py
++1177fbd22b7c     7169  app/infrastructure/db/models.py
++1d74ce50d81e     1297  app/infrastructure/db/session.py
++e3b0c44298fc        0  app/infrastructure/llm/__init__.py
++ef744aa4f1f0      955  app/infrastructure/llm/base.py
++c382d644013c     5138  app/infrastructure/llm/openrouter.py
++e3b0c44298fc        0  app/infrastructure/providers/__init__.py
++e3b0c44298fc        0  app/infrastructure/providers/news/__init__.py
++95dbe7a185ee      317  app/infrastructure/providers/news/base.py
++0b354bf4c479      307  app/infrastructure/providers/news/factory.py
++d0db04d5d7eb      614  app/infrastructure/providers/news/mock.py
++e3b0c44298fc        0  app/infrastructure/repositories/__init__.py
++3780e574a259      508  app/infrastructure/repositories/channels.py
++843ff6e4defd     1254  app/infrastructure/repositories/job_runs.py
++3d9c2c8f044c     3403  app/infrastructure/repositories/sent_stories.py
++98b434b4f14f     1399  app/infrastructure/repositories/stories.py
++17c26b3596bb      776  app/infrastructure/repositories/topics.py
++9cd765d06804      493  app/infrastructure/repositories/users.py
++e3b0c44298fc        0  app/infrastructure/scheduler/__init__.py
++924eca3d5a4f     6612  app/infrastructure/scheduler/service.py
++75ad4f4c2943       13  app/infrastructure/sources/__init__.py
++2cf1c92fe019      390  app/infrastructure/sources/base.py
++39ed3f013dcc     1009  app/infrastructure/sources/factory.py
++7c1f9f4c67e3      749  app/infrastructure/sources/mock.py
++7204b76f4dd9    25956  app/infrastructure/sources/openrouter_web_search.py
++7ddd092e2203      361  app/infrastructure/sources/registry.py
++d07ebd801881      475  app/infrastructure/sources/rss.py
++f103c30f2ced      526  app/infrastructure/sources/telegram_channel.py
++e3b0c44298fc        0  app/infrastructure/telegram/__init__.py
++46785f053470     1032  app/infrastructure/telegram/callbacks.py
++65c143a1de1e     1258  app/infrastructure/telegram/publisher.py
++849df429827a      221  app/infrastructure/telegram/service_messages.py
++f3e0497436f9     1007  app/main.py
++6e4ef965b2b1      533  app/scheduler_runner.py
++8879f40b749b      276  app/schemas/__init__.py
++57a132efdbc1      604  app/schemas/articles.py
++cd09bc2751b5      624  app/schemas/discovery.py
++cae2e2460f27      484  app/schemas/llm.py
++44a484d477ca      726  app/schemas/publishing.py
++100b72d518ea     1169  app/schemas/sources.py
++80ab877d1eed      423  app/schemas/topics.py
++ed58d05be430      216  app/search_v2/__init__.py
++6273bea2d7f8    13202  app/search_v2/article_filter.py
++29ad4c6c8ba0    17221  app/search_v2/strategy.py
++e3b0c44298fc        0  app/shared/__init__.py
++686a9a4f11f9     1750  app/shared/logging.py
++efb3baf482e4     1865  app/shared/settings.py
++dd1536cb52a9     1165  docker-compose.yml
++e2504a2824fd      298  docker/app/Dockerfile
++5365d83d843f     1208  pyproject.toml
++d0a5179e44e0      180  tests/conftest.py
++52cc9912ef57     1912  tests/test_deduplication.py
++ac7414a53269     2602  tests/test_disambiguation_diversity.py
++56d68178607c      228  tests/test_normalization.py
++110ae3b0328c     2309  tests/test_quality_engine_v5.py
++4c2bf16d36a0     3228  tests/test_quality_filters.py
++8454e4af87be     1078  tests/test_ranking.py
++60e35e75f042     2782  tests/test_search_v2.py
++f4c947b7d271     1604  tests/test_source_collection.py
+--- /dev/null
++++ v5.1/PATCH_V5_TO_V5_1.diff
+@@ -0,0 +1,387 @@
++--- v5/.env.example
+++++ v5.1/.env.example
++@@ -22,6 +22,11 @@
++ OPENROUTER_MIN_QUALITY_CANDIDATES=4
++ OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
++ OPENROUTER_DEBUG_REJECTIONS=true
+++OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
+++OPENROUTER_REQUIRE_VERIFIED_PUBLISH_DATE=true
+++OPENROUTER_ALLOW_WEAK_PUBLISH_DATES=false
+++OPENROUTER_ALLOW_UNDATED_FALLBACK=false
+++OPENROUTER_FUTURE_SKEW_HOURS=12
++ ENABLE_OPENROUTER_WEB_SEARCH_SOURCE=true
++ ENABLE_MOCK_SOURCE=false
++ ENABLE_TELEGRAM_CHANNEL_SOURCE=false
++--- v5/app/infrastructure/sources/openrouter_web_search.py
+++++ v5.1/app/infrastructure/sources/openrouter_web_search.py
++@@ -72,6 +72,11 @@
++         self._min_quality_candidates = max(settings.openrouter_min_quality_candidates, 1)
++         self._allow_plugin_fallback = settings.openrouter_allow_plugin_fallback
++         self._debug_rejections = settings.openrouter_debug_rejections
+++        self._max_article_age_hours = max(settings.openrouter_max_article_age_hours, 1)
+++        self._require_verified_publish_date = settings.openrouter_require_verified_publish_date
+++        self._allow_weak_publish_dates = settings.openrouter_allow_weak_publish_dates
+++        self._allow_undated_fallback = settings.openrouter_allow_undated_fallback
+++        self._future_skew_hours = max(settings.openrouter_future_skew_hours, 0)
++ 
++     async def fetch(
++         self,
++@@ -174,9 +179,10 @@
++                 {
++                     "role": "system",
++                     "content": (
++-                        "You are a news discovery assistant. Search the web for recent news articles on the given topic. "
++-                        "Prefer authoritative journalism and recent reporting. If multiple languages cover the same story, prefer "
++-                        "English then German. In your answer, keep it short and cite each result."
+++                        "You are a news discovery assistant. Search the web for genuinely recent news articles on the given topic. "
+++                        "Prefer authoritative journalism and recent reporting with a visible publication date. Do not return old archive articles, "
+++                        "evergreen pages, stale explainers, or pages whose publication date is outside the requested window. If multiple languages "
+++                        "cover the same story, prefer English then German. In your answer, keep it short and cite each result."
++                     ),
++                 },
++                 {
++@@ -185,8 +191,9 @@
++                         f"Topic: {query}\n"
++                         f"Time window start: {from_dt.isoformat()}\n"
++                         f"Time window end: {to_dt.isoformat()}\n"
++-                        f"Return up to {limit} recent news article links only with short one-line reasons. "
++-                        "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, stock-analysis pages, and generic news-hub pages."
+++                        f"Return up to {limit} news article links published within this exact window only. "
+++                        "If the publication date is missing or probably older than the start time, omit the result. "
+++                        "Use short one-line reasons. Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, and generic news-hub pages."
++                     ),
++                 },
++             ],
++@@ -217,8 +224,8 @@
++                 {
++                     "role": "system",
++                     "content": (
++-                        "You are a news discovery assistant. Find recent news article links for the given topic. "
++-                        "Prefer authoritative sources and cite each result. Only return recent hard-news article URLs that fit the requested time window."
+++                        "You are a news discovery assistant. Find genuinely recent news article links for the given topic. "
+++                        "Prefer authoritative sources with visible publication dates and cite each result. Only return hard-news article URLs published inside the requested time window."
++                     ),
++                 },
++                 {
++@@ -227,8 +234,9 @@
++                         f"Topic: {query}\n"
++                         f"Time window start: {from_dt.isoformat()}\n"
++                         f"Time window end: {to_dt.isoformat()}\n"
++-                        f"Return up to {limit} recent news article links only. "
++-                        "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, stock-analysis pages, and generic news-hub pages."
+++                        f"Return up to {limit} news article links published within this exact window only. "
+++                        "If the publication date is missing or probably older than the start time, omit the result. "
+++                        "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, and generic news-hub pages."
++                     ),
++                 },
++             ],
++@@ -325,7 +333,8 @@
++         plan,
++     ) -> list[RawSourceItem]:
++         enriched: list[RawSourceItem] = []
++-        freshness_floor = from_dt if getattr(plan, "first_run", False) else max(from_dt, to_dt - timedelta(hours=48))
+++        freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+++        future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
++         async with httpx.AsyncClient(timeout=min(self._timeout_seconds, 15.0), follow_redirects=True) as client:
++             for item in items:
++                 url = str(item.url) if item.url is not None else None
++@@ -335,39 +344,64 @@
++                 try:
++                     response = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
++                     if response.status_code >= 400:
++-                        fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason=f"http_{response.status_code}")
+++                        fallback = self._fallback_candidate(
+++                            item,
+++                            from_dt=from_dt,
+++                            to_dt=to_dt,
+++                            plan=plan,
+++                            reason=f"http_{response.status_code}",
+++                        )
++                         if fallback is not None:
++                             enriched.append(fallback)
++                         continue
++                 except Exception as exc:
++-                    fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason=type(exc).__name__)
+++                    fallback = self._fallback_candidate(
+++                        item,
+++                        from_dt=from_dt,
+++                        to_dt=to_dt,
+++                        plan=plan,
+++                        reason=type(exc).__name__,
+++                    )
++                     if fallback is not None:
++                         enriched.append(fallback)
++                     continue
++ 
++                 meta = extract_html_metadata(response.text)
++                 canonical_url = meta.canonical_url or self._extract_canonical_url(response.text) or str(response.url)
++-                published_at = self._extract_published_at(response.text)
+++                candidate_title = meta.title or item.title
+++                candidate_desc = meta.description or item.description
+++
+++                published_at, published_source = self._extract_best_publish_datetime(
+++                    html=response.text,
+++                    canonical_url=canonical_url,
+++                    last_modified=response.headers.get("last-modified"),
+++                )
++                 if published_at is None:
++-                    published_at = self._extract_date_from_url(canonical_url)
++-                if published_at is None:
++-                    published_at = self._extract_last_modified(response.headers.get("last-modified"))
++-                if published_at is None and plan.first_run:
++-                    published_at = to_dt
++-                if published_at is None:
++-                    fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason="missing_publish_date")
++-                    if fallback is not None:
++-                        enriched.append(fallback)
+++                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "missing_verified_publish_date")
++                     continue
++                 if published_at.tzinfo is None:
++                     published_at = published_at.replace(tzinfo=timezone.utc)
++                 published_at = published_at.astimezone(timezone.utc)
+++
++                 if published_at < freshness_floor:
++-                    self._log_rejection(plan, canonical_url, meta.title or item.title, meta.description or item.description, "outside_freshness_window")
++-                    continue
++-
++-                candidate_title = meta.title or item.title
++-                candidate_desc = meta.description or item.description
+++                    self._log_rejection(
+++                        plan,
+++                        canonical_url,
+++                        candidate_title,
+++                        candidate_desc,
+++                        f"outside_freshness_window:{published_source}:{published_at.isoformat()}",
+++                    )
+++                    continue
+++                if published_at > future_ceiling:
+++                    self._log_rejection(
+++                        plan,
+++                        canonical_url,
+++                        candidate_title,
+++                        candidate_desc,
+++                        f"future_publish_date:{published_source}:{published_at.isoformat()}",
+++                    )
+++                    continue
+++
++                 source_language = item.source_language or meta.language or self._extract_language(response.text)
++                 parsed_url = self._safe_http_url(canonical_url)
++                 if parsed_url is None or not self._looks_like_news_article(canonical_url, candidate_title):
++@@ -395,24 +429,62 @@
++                         "directness_score": quality.directness_score,
++                         "article_confidence": article_confidence(canonical_url, candidate_title, candidate_desc),
++                         "quality_reason": "accepted",
+++                        "published_at_source": published_source,
+++                        "freshness_verified": published_source in {"metadata", "url"},
+++                        "freshness_floor": freshness_floor.isoformat(),
++                     },
++                 }))
++         enriched.sort(key=lambda x: (int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
++         return enriched
++ 
++-    def _fallback_candidate(self, item: RawSourceItem, *, to_dt: datetime, plan, reason: str) -> RawSourceItem | None:
+++    def _fallback_candidate(
+++        self,
+++        item: RawSourceItem,
+++        *,
+++        from_dt: datetime,
+++        to_dt: datetime,
+++        plan,
+++        reason: str,
+++    ) -> RawSourceItem | None:
++         url = str(item.url) if item.url is not None else None
++         if not url:
++             return None
++         if not self._looks_like_news_article(url, item.title):
++             self._log_rejection(plan, url, item.title, item.description, f"fallback_not_article:{reason}")
++             return None
+++
+++        url_date = self._extract_date_from_url(url)
+++        if url_date is None:
+++            if self._require_verified_publish_date and not self._allow_undated_fallback:
+++                self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
+++                return None
+++            if not self._allow_undated_fallback:
+++                self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
+++                return None
+++            published_at = to_dt
+++            published_source = "fallback_unverified"
+++        else:
+++            published_at = url_date
+++            published_source = "url"
+++
+++        if published_at.tzinfo is None:
+++            published_at = published_at.replace(tzinfo=timezone.utc)
+++        published_at = published_at.astimezone(timezone.utc)
+++        freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+++        future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
+++        if published_at < freshness_floor:
+++            self._log_rejection(plan, url, item.title, item.description, f"fallback_outside_freshness_window:{published_source}:{published_at.isoformat()}")
+++            return None
+++        if published_at > future_ceiling:
+++            self._log_rejection(plan, url, item.title, item.description, f"fallback_future_publish_date:{published_source}:{published_at.isoformat()}")
+++            return None
+++
++         quality = candidate_quality(plan, url=url, title=item.title, description=item.description)
++         if not quality.accepted or quality.directness_score < plan.minimum_directness + 2:
++             self._log_rejection(plan, url, item.title, item.description, quality.reason or f"fallback_rejected:{reason}")
++             return None
++         return item.model_copy(update={
++-            "published_at": to_dt,
+++            "published_at": published_at,
++             "metadata": {
++                 **item.metadata,
++                 "canonical_url": url,
++@@ -421,8 +493,47 @@
++                 "article_confidence": article_confidence(url, item.title, item.description),
++                 "metadata_fallback": True,
++                 "metadata_fallback_reason": reason,
+++                "published_at_source": published_source,
+++                "freshness_verified": published_source == "url",
+++                "freshness_floor": freshness_floor.isoformat(),
++             },
++         })
+++
+++    def _freshness_floor(self, *, from_dt: datetime, to_dt: datetime, plan) -> datetime:
+++        floor = from_dt
+++        max_age_floor = to_dt - timedelta(hours=self._max_article_age_hours)
+++        if max_age_floor > floor:
+++            floor = max_age_floor
+++        # Follow-up runs should be stricter, because sending stale leftovers as "latest" feels broken.
+++        if not getattr(plan, "first_run", False):
+++            followup_floor = to_dt - timedelta(hours=min(48, self._max_article_age_hours))
+++            if followup_floor > floor:
+++                floor = followup_floor
+++        if floor.tzinfo is None:
+++            floor = floor.replace(tzinfo=timezone.utc)
+++        return floor.astimezone(timezone.utc)
+++
+++    def _extract_best_publish_datetime(
+++        self,
+++        *,
+++        html: str,
+++        canonical_url: str,
+++        last_modified: str | None,
+++    ) -> tuple[datetime | None, str | None]:
+++        published_at = self._extract_published_at(html)
+++        if published_at is not None:
+++            return published_at, "metadata"
+++
+++        published_at = self._extract_date_from_url(canonical_url)
+++        if published_at is not None:
+++            return published_at, "url"
+++
+++        if not self._require_verified_publish_date or self._allow_weak_publish_dates:
+++            published_at = self._extract_last_modified(last_modified)
+++            if published_at is not None:
+++                return published_at, "last_modified"
+++
+++        return None, None
++ 
++     def _log_rejection(self, plan, url: str, title: str | None, description: str | None, reason: str) -> None:
++         if not self._debug_rejections:
++--- v5/app/search_v2/strategy.py
+++++ v5.1/app/search_v2/strategy.py
++@@ -161,10 +161,16 @@
++ 
++ 
++ def _freshness_hint(from_dt: datetime, to_dt: datetime, first_run: bool) -> str:
++-    if first_run:
++-        return "recent news"
++     hours = max(int((to_dt - from_dt).total_seconds() // 3600), 1)
++-    return "past 24 hours" if hours <= 30 else "past 48 hours"
+++    since = from_dt.strftime("%Y-%m-%d")
+++    if hours <= 30:
+++        return f"past 24 hours published after {since}"
+++    if hours <= 54:
+++        return f"past 48 hours published after {since}"
+++    if hours <= 96:
+++        return f"past 72 hours published after {since}"
+++    # First runs can use a wider window, but never a vague "recent" query.
+++    return f"past {max(1, hours // 24)} days published after {since}"
++ 
++ 
++ def _semantic_hints_for_query(q: str, kind: str) -> set[str]:
++--- v5/app/shared/settings.py
+++++ v5.1/app/shared/settings.py
++@@ -29,6 +29,11 @@
++     openrouter_min_quality_candidates: int = 4
++     openrouter_allow_plugin_fallback: bool = False
++     openrouter_debug_rejections: bool = True
+++    openrouter_max_article_age_hours: int = 168
+++    openrouter_require_verified_publish_date: bool = True
+++    openrouter_allow_weak_publish_dates: bool = False
+++    openrouter_allow_undated_fallback: bool = False
+++    openrouter_future_skew_hours: int = 12
++ 
++     enable_openrouter_web_search_source: bool = True
++     enable_mock_source: bool = False
++--- v5/tests/test_source_collection.py
+++++ v5.1/tests/test_source_collection.py
++@@ -44,4 +44,8 @@
++     now = datetime.now(tz=UTC)
++     queries = OpenRouterWebSearchSource._build_queries("BMW", now - timedelta(hours=24), now)
++     joined = " ".join(queries).lower()
++-    assert "7 series" in joined or "i7" in joined
+++    # Universal quality engine should not hard-code model names for one brand.
+++    # It should keep brand queries news/business-oriented and date-bounded.
+++    assert "bmw" in joined
+++    assert "published after" in joined
+++    assert "reuters" in joined or "bloomberg" in joined or "cnbc" in joined
++--- /dev/null
+++++ v5.1/tests/test_freshness_guard_v51.py
++@@ -0,0 +1,54 @@
+++from __future__ import annotations
+++
+++from datetime import datetime, timedelta, timezone
+++
+++from app.infrastructure.sources.openrouter_web_search import OpenRouterWebSearchSource
+++from app.search_v2.strategy import build_search_plan
+++
+++
+++def test_search_plan_uses_explicit_publish_after_date() -> None:
+++    to_dt = datetime(2026, 4, 25, 12, tzinfo=timezone.utc)
+++    from_dt = to_dt - timedelta(days=7)
+++    plan = build_search_plan("Volkswagen", from_dt=from_dt, to_dt=to_dt, first_run=True)
+++    assert "published after 2026-04-18" in plan.freshness_hint
+++    assert any("published after 2026-04-18" in query for query in plan.query_variants)
+++
+++
+++def test_verified_publish_date_prefers_article_metadata() -> None:
+++    source = object.__new__(OpenRouterWebSearchSource)
+++    source._require_verified_publish_date = True
+++    source._allow_weak_publish_dates = False
+++    html = '<html><head><meta property="article:published_time" content="2026-04-24T10:15:00Z"></head></html>'
+++    dt, dt_source = source._extract_best_publish_datetime(
+++        html=html,
+++        canonical_url="https://example.com/2025/01/01/old-slug",
+++        last_modified="Fri, 25 Apr 2026 10:00:00 GMT",
+++    )
+++    assert dt == datetime(2026, 4, 24, 10, 15, tzinfo=timezone.utc)
+++    assert dt_source == "metadata"
+++
+++
+++def test_verified_publish_date_can_use_url_date() -> None:
+++    source = object.__new__(OpenRouterWebSearchSource)
+++    source._require_verified_publish_date = True
+++    source._allow_weak_publish_dates = False
+++    dt, dt_source = source._extract_best_publish_datetime(
+++        html="<html></html>",
+++        canonical_url="https://example.com/news/2026/04/24/volkswagen-results",
+++        last_modified=None,
+++    )
+++    assert dt == datetime(2026, 4, 24, tzinfo=timezone.utc)
+++    assert dt_source == "url"
+++
+++
+++def test_missing_publish_date_is_not_faked_from_last_modified_by_default() -> None:
+++    source = object.__new__(OpenRouterWebSearchSource)
+++    source._require_verified_publish_date = True
+++    source._allow_weak_publish_dates = False
+++    dt, dt_source = source._extract_best_publish_datetime(
+++        html="<html></html>",
+++        canonical_url="https://example.com/news/volkswagen-results",
+++        last_modified="Fri, 25 Apr 2026 10:00:00 GMT",
+++    )
+++    assert dt is None
+++    assert dt_source is None
+--- /dev/null
++++ v5.1/QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+@@ -0,0 +1,83 @@
++# Quality Engine v5.1 — Freshness Guard
++
++Цель патча: убрать ситуацию, когда бот выдаёт прошлогодние или старые статьи как `latest digest`.
++
++## Что было не так
++
++В v5 у OpenRouter source был опасный fallback: если статья была найдена через web-search, но HTML страницы не отдавался, блокировался или не содержал нормальной даты публикации, движок мог поставить `published_at = now`.
++
++Из-за этого старая статья могла выглядеть свежей внутри пайплайна.
++
++## Что изменено
++
++### 1. Больше не подделываем дату публикации
++
++Если дата публикации не найдена и не подтверждена, кандидат по умолчанию отбрасывается.
++
++Подтверждёнными считаются:
++
++- `article:published_time` / `datePublished` / `<time datetime=...>` и похожие metadata;
++- дата в URL, например `/2026/04/24/...`.
++
++`Last-Modified` по умолчанию НЕ считается надёжной датой публикации, потому что старые статьи часто обновляются сайтом технически.
++
++### 2. Добавлен freshness floor
++
++Даже если тема запущена впервые с широким окном, статья не может быть старше:
++
++```env
++OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
++```
++
++То есть по умолчанию максимум 7 дней.
++
++Для повторного запуска окно ещё строже: максимум последние 48 часов, чтобы бот не доставал слабые старые остатки сразу после первого дайджеста.
++
++### 3. Усилен prompt для OpenRouter search
++
++Теперь запросы прямо требуют статьи, опубликованные внутри окна времени, и просят не возвращать старые архивы или страницы без даты.
++
++### 4. Query variants теперь содержат `published after YYYY-MM-DD`
++
++Раньше первый запуск мог писать слишком расплывчато: `recent news`.
++Теперь каждый query variant содержит явную нижнюю границу даты.
++
++### 5. Добавлены debug rejection reasons
++
++Новые причины отказа:
++
++- `missing_verified_publish_date`
++- `outside_freshness_window:<source>:<date>`
++- `future_publish_date:<source>:<date>`
++- `fallback_missing_verified_date:<reason>`
++- `fallback_outside_freshness_window:<source>:<date>`
++
++## Новые настройки `.env`
++
++```env
++OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
++OPENROUTER_REQUIRE_VERIFIED_PUBLISH_DATE=true
++OPENROUTER_ALLOW_WEAK_PUBLISH_DATES=false
++OPENROUTER_ALLOW_UNDATED_FALLBACK=false
++OPENROUTER_FUTURE_SKEW_HOURS=12
++```
++
++Рекомендуемый режим — оставить так.
++
++Если окажется, что некоторые хорошие сайты часто не отдают дату, можно временно включить:
++
++```env
++OPENROUTER_ALLOW_WEAK_PUBLISH_DATES=true
++```
++
++Но лучше сначала посмотреть логи rejection reasons.
++
++## Что проверено
++
++- `python -m compileall -q app tests` — PASS
++- `pytest -q` — PASS, 29 tests
++- zip integrity — PASS
++
++## Важно
++
++Этот патч не делает упор на конкретные темы. Он добавляет универсальное правило: `latest digest` не должен доверять статьям без подтверждённой свежей даты.
+--- /dev/null
++++ v5.1/REMOVED_FILES_V5_1.md
+@@ -0,0 +1,3 @@
++# Removed files in v5.1
++
++No working files removed.
+--- /dev/null
++++ v5.1/TEST_REPORT_V5_1.md
+@@ -0,0 +1,16 @@
++# Test Report v5.1
++
++Команды, выполненные в контейнере:
++
++```bash
++python -m compileall -q app tests
++pytest -q
++```
++
++Результат:
++
++```text
++29 passed in 4.32s
++```
++
++Живой Telegram/OpenRouter не запускался в контейнере, потому что здесь нет твоих реальных ключей и окружения.
+--- /dev/null
++++ v5.1/tests/test_freshness_guard_v51.py
+@@ -0,0 +1,54 @@
++from __future__ import annotations
++
++from datetime import datetime, timedelta, timezone
++
++from app.infrastructure.sources.openrouter_web_search import OpenRouterWebSearchSource
++from app.search_v2.strategy import build_search_plan
++
++
++def test_search_plan_uses_explicit_publish_after_date() -> None:
++    to_dt = datetime(2026, 4, 25, 12, tzinfo=timezone.utc)
++    from_dt = to_dt - timedelta(days=7)
++    plan = build_search_plan("Volkswagen", from_dt=from_dt, to_dt=to_dt, first_run=True)
++    assert "published after 2026-04-18" in plan.freshness_hint
++    assert any("published after 2026-04-18" in query for query in plan.query_variants)
++
++
++def test_verified_publish_date_prefers_article_metadata() -> None:
++    source = object.__new__(OpenRouterWebSearchSource)
++    source._require_verified_publish_date = True
++    source._allow_weak_publish_dates = False
++    html = '<html><head><meta property="article:published_time" content="2026-04-24T10:15:00Z"></head></html>'
++    dt, dt_source = source._extract_best_publish_datetime(
++        html=html,
++        canonical_url="https://example.com/2025/01/01/old-slug",
++        last_modified="Fri, 25 Apr 2026 10:00:00 GMT",
++    )
++    assert dt == datetime(2026, 4, 24, 10, 15, tzinfo=timezone.utc)
++    assert dt_source == "metadata"
++
++
++def test_verified_publish_date_can_use_url_date() -> None:
++    source = object.__new__(OpenRouterWebSearchSource)
++    source._require_verified_publish_date = True
++    source._allow_weak_publish_dates = False
++    dt, dt_source = source._extract_best_publish_datetime(
++        html="<html></html>",
++        canonical_url="https://example.com/news/2026/04/24/volkswagen-results",
++        last_modified=None,
++    )
++    assert dt == datetime(2026, 4, 24, tzinfo=timezone.utc)
++    assert dt_source == "url"
++
++
++def test_missing_publish_date_is_not_faked_from_last_modified_by_default() -> None:
++    source = object.__new__(OpenRouterWebSearchSource)
++    source._require_verified_publish_date = True
++    source._allow_weak_publish_dates = False
++    dt, dt_source = source._extract_best_publish_datetime(
++        html="<html></html>",
++        canonical_url="https://example.com/news/volkswagen-results",
++        last_modified="Fri, 25 Apr 2026 10:00:00 GMT",
++    )
++    assert dt is None
++    assert dt_source is None

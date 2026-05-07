@@ -1,0 +1,1185 @@
+--- a/.env.example
++++ b/.env.example
+@@ -14,7 +14,14 @@
+ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+ OPENROUTER_DEFAULT_MODEL=openai/gpt-4.1-mini
+ OPENROUTER_SEARCH_MODEL=
+-OPENROUTER_WEB_SEARCH_MAX_RESULTS=5
++OPENROUTER_WEB_SEARCH_MAX_RESULTS=16
++OPENROUTER_TOPIC_BUDGET_USD=0.07
++OPENROUTER_SEARCH_RESULT_COST_USD=0.004
++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=8
++OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=2
++OPENROUTER_MIN_QUALITY_CANDIDATES=4
++OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
++OPENROUTER_DEBUG_REJECTIONS=true
+ ENABLE_OPENROUTER_WEB_SEARCH_SOURCE=true
+ ENABLE_MOCK_SOURCE=false
+ ENABLE_TELEGRAM_CHANNEL_SOURCE=false
+@@ -25,6 +32,7 @@
+ STORY_MEMORY_DAYS=7
+ MAX_ARTICLES_PER_PROVIDER=100
+ MAX_STORIES_PER_POST=5
++LLM_RELEVANCE_MAX_CHECKS_PER_TOPIC=8
+ PUBLISH_EMPTY_DIGEST=false
+ 
+ SCHEDULER_REFRESH_SECONDS=10
+--- a/app/application/services/topic_processing.py
++++ b/app/application/services/topic_processing.py
+@@ -71,8 +71,15 @@
+ 
+         window_to = datetime.now(tz=timezone.utc)
+         has_history = await self._sent_story_repository.has_any_for_topic(topic_id=topic_id)
++        recent_sent_count = await self._sent_story_repository.get_recent_sent_count(topic_id=topic_id, hours=72)
++        thin_recent_history = has_history and recent_sent_count < min(3, settings.max_stories_per_post)
+         if window_override_hours is not None:
+             window_from = window_to - timedelta(hours=window_override_hours)
++        elif force:
++            window_from = window_to - timedelta(days=7)
++        elif thin_recent_history:
++            # A previous thin run should not immediately starve the next run.
++            window_from = window_to - timedelta(hours=72)
+         elif has_history:
+             window_from = window_to - timedelta(hours=48)
+         elif topic.mode == DeliveryMode.DAILY_DIGEST.value:
+@@ -81,6 +88,8 @@
+             window_from = window_to - timedelta(days=7)
+ 
+         job_run = await self._job_run_repository.start(topic_id=topic_id)
++        # Commit the running job row separately so failures can be recorded after rollback.
++        await self._session.commit()
+         logger.info(
+             'job_start',
+             run_id=job_run.run_id,
+@@ -89,6 +98,9 @@
+             mode=topic.mode,
+             window_from=window_from.isoformat(),
+             window_to=window_to.isoformat(),
++            force=force,
++            recent_sent_count=recent_sent_count,
++            thin_recent_history=thin_recent_history,
+         )
+ 
+         try:
+@@ -107,10 +119,28 @@
+             sent_signatures = await self._sent_story_repository.get_sent_story_signatures(topic_id=topic_id)
+             sent_url_fingerprints = await self._sent_story_repository.get_sent_url_fingerprints(topic_id=topic_id)
+             selected_candidates = []
++            relevance_checks = 0
++            max_relevance_checks = max(settings.llm_relevance_max_checks_per_topic, settings.max_stories_per_post)
+             for story in story_candidates:
+                 primary = select_primary_article(story.articles)
++                if relevance_checks >= max_relevance_checks:
++                    logger.info(
++                        'candidate_skipped_relevance_budget',
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        max_relevance_checks=max_relevance_checks,
++                    )
++                    continue
++                relevance_checks += 1
+                 relevance = await self._safe_check_relevance(topic.query_text, primary)
+                 if relevance.relevance == RelevanceLabel.REJECT:
++                    logger.info(
++                        'candidate_rejected_by_llm',
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                        reason=relevance.reason,
++                    )
+                     continue
+ 
+                 primary_fp = None
+@@ -226,6 +256,14 @@
+                 await self._session.rollback()
+             except Exception:
+                 pass
++            try:
++                await self._job_run_repository.finish_failed(job_run, error_text=f'{type(exc).__name__}: {exc}'[:1000])
++                await self._session.commit()
++            except Exception:
++                try:
++                    await self._session.rollback()
++                except Exception:
++                    pass
+             logger.exception('job_failed', run_id=job_run.run_id, topic_id=topic_id, error_type=type(exc).__name__)
+             raise
+ 
+--- a/app/domain/policies/ranking.py
++++ b/app/domain/policies/ranking.py
+@@ -152,6 +152,7 @@
+         + source_quality_weight(article.source_name)
+         + language_priority(article.source_language)
+         + float(article.metadata.get("topic_match_score", 0)) * 1.0
++        + float(article.metadata.get("directness_score", 0)) * 1.8
+         + float(article.metadata.get("article_confidence", 0)) * 2.0
+         + url_quality_penalty(article)
+     )
+@@ -175,7 +176,8 @@
+     language = (primary.source_language or "").lower()
+     language_bonus = 6.0 if language == "en" else 4.0 if language in {"de", "uk"} else 0.0
+     recency_bonus = freshness_weight(primary.published_at) * 0.25
+-    return article_score(primary) + float(len(story.articles)) + source_diversity_bonus + language_bonus + recency_bonus
++    directness_bonus = max(float(article.metadata.get("directness_score", 0)) for article in story.articles) * 0.7
++    return article_score(primary) + float(len(story.articles)) + source_diversity_bonus + language_bonus + recency_bonus + directness_bonus
+ 
+ 
+ 
+@@ -186,26 +188,39 @@
+ 
+ 
+ def select_diverse_stories(candidates: Iterable[StoryCandidate], limit: int) -> list[StoryCandidate]:
++    """Select stories in stages: first unique domains, then repeat domains only if needed.
++
++    A soft penalty is not enough for small digests: one strong source can otherwise take
++    several slots. This keeps the first pass diverse while still allowing a second item
++    from the same domain when there are not enough good alternatives.
++    """
+     ordered = rank_stories(candidates)
++    if limit <= 0:
++        return []
++
+     selected: list[StoryCandidate] = []
+     used_sources: set[str] = set()
+-    remaining = list(ordered)
+-
+-    while remaining and len(selected) < limit:
+-        best_story = None
+-        best_value = None
+-        for story in remaining:
+-            primary = select_primary_article(story.articles)
+-            source_key = _source_key(primary)
+-            penalty = 6.0 if source_key in used_sources else 0.0
+-            value = story_score(story) - penalty
+-            if best_value is None or value > best_value:
+-                best_story = story
+-                best_value = value
+-        assert best_story is not None
+-        selected.append(best_story)
+-        used_sources.add(_source_key(select_primary_article(best_story.articles)))
+-        remaining = [story for story in remaining if story.story_hash != best_story.story_hash]
++
++    # Pass 1: best stories from unique domains.
++    for story in ordered:
++        primary = select_primary_article(story.articles)
++        source_key = _source_key(primary)
++        if source_key in used_sources:
++            continue
++        selected.append(story)
++        used_sources.add(source_key)
++        if len(selected) >= limit:
++            return selected
++
++    # Pass 2: fill remaining slots, allowing repeats but still preserving ranking.
++    selected_hashes = {story.story_hash for story in selected}
++    for story in ordered:
++        if story.story_hash in selected_hashes:
++            continue
++        selected.append(story)
++        selected_hashes.add(story.story_hash)
++        if len(selected) >= limit:
++            return selected
+ 
+     return selected
+ 
+--- a/app/infrastructure/repositories/sent_stories.py
++++ b/app/infrastructure/repositories/sent_stories.py
+@@ -33,6 +33,18 @@
+             select(func.count()).select_from(SentStory).where(SentStory.topic_id == topic_id)
+         )
+         return (result.scalar_one() or 0) > 0
++
++
++
++    async def get_recent_sent_count(self, *, topic_id: int, hours: int = 72) -> int:
++        threshold = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
++        result = await self._session.execute(
++            select(func.count()).select_from(SentStory).where(
++                SentStory.topic_id == topic_id,
++                SentStory.sent_at >= threshold,
++            )
++        )
++        return int(result.scalar_one() or 0)
+ 
+     async def get_all_story_ids(self, *, topic_id: int) -> set[int]:
+         result = await self._session.execute(
+--- a/app/infrastructure/sources/openrouter_web_search.py
++++ b/app/infrastructure/sources/openrouter_web_search.py
+@@ -12,7 +12,7 @@
+ 
+ from app.domain.enums import SourceType
+ from app.schemas.sources import RawSourceItem
+-from app.search_v2 import build_search_plan, extract_html_metadata, is_candidate_article, topic_match_score, article_confidence
++from app.search_v2 import build_search_plan, extract_html_metadata, is_candidate_article, topic_match_score, article_confidence, candidate_quality
+ from app.shared.logging import get_logger
+ from app.shared.settings import get_settings
+ 
+@@ -64,7 +64,14 @@
+         self._api_key = settings.openrouter_api_key
+         self._model = model or settings.openrouter_search_model or settings.openrouter_default_model
+         self._timeout_seconds = timeout_seconds
+-        self._max_results = max(settings.openrouter_web_search_max_results, 8)
++        self._max_results = max(settings.openrouter_web_search_max_results, 1)
++        self._topic_budget_usd = max(settings.openrouter_topic_budget_usd, 0.0)
++        self._search_result_cost_usd = max(settings.openrouter_search_result_cost_usd, 0.0)
++        self._results_per_call = max(settings.openrouter_web_search_results_per_call, 1)
++        self._max_calls_per_topic = max(settings.openrouter_web_search_max_calls_per_topic, 1)
++        self._min_quality_candidates = max(settings.openrouter_min_quality_candidates, 1)
++        self._allow_plugin_fallback = settings.openrouter_allow_plugin_fallback
++        self._debug_rejections = settings.openrouter_debug_rejections
+ 
+     async def fetch(
+         self,
+@@ -74,46 +81,63 @@
+         limit: int,
+     ) -> list[RawSourceItem]:
+         plan = build_search_plan(query, from_dt=from_dt, to_dt=to_dt, first_run=(to_dt - from_dt) > timedelta(hours=60))
+-        broad_topic = plan.broad_topic
+-        effective_limit = min(limit, 6 if broad_topic else 5)
+-        queries = plan.query_variants
++        target_limit = max(1, min(limit, self._max_results))
++        results_per_call = max(1, min(self._results_per_call, target_limit))
++        max_calls = self._allowed_search_calls(results_per_call)
++        queries = plan.query_variants[:max_calls]
+         merged: list[RawSourceItem] = []
+         seen_urls: set[str] = set()
+ 
+-        empty_runs = 0
++        logger.info(
++            "source_fetch_plan",
++            source=self.name,
++            query=query,
++            topic_kind=plan.topic_kind,
++            target_limit=target_limit,
++            results_per_call=results_per_call,
++            max_calls=max_calls,
++            budget_usd=self._topic_budget_usd,
++            query_variants=queries,
++        )
++
+         for current_query in queries:
+-            payload = await self._call_server_tool(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=effective_limit, broad_topic=broad_topic)
+-            items = self._extract_items_from_payload(payload, effective_limit)
++            payload = await self._call_server_tool(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call, broad_topic=plan.broad_topic)
++            items = self._extract_items_from_payload(payload, results_per_call)
+             items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
+-            if not items:
+-                empty_runs += 1
+-            self._merge_unique(merged, seen_urls, items, effective_limit)
+-            if len(merged) >= effective_limit:
+-                logger.info("source_fetch_success", source=self.name, strategy="server_tool_multi", count=len(merged))
++            self._merge_unique(merged, seen_urls, items, target_limit)
++            if len(merged) >= target_limit:
++                logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+                 return merged
+-            if broad_topic and empty_runs >= 4 and merged:
+-                break
+ 
+         if merged:
+-            logger.info("source_fetch_success", source=self.name, strategy="server_tool_multi", count=len(merged))
++            logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+             return merged
+ 
+-        for current_query in queries:
+-            payload = await self._call_plugin_fallback(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=effective_limit)
+-            items = self._extract_items_from_payload(payload, effective_limit)
+-            items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
+-            self._merge_unique(merged, seen_urls, items, effective_limit)
+-            if len(merged) >= effective_limit:
+-                logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_multi", count=len(merged))
+-                return merged
++        if self._allow_plugin_fallback:
++            for current_query in queries:
++                payload = await self._call_plugin_fallback(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call)
++                items = self._extract_items_from_payload(payload, results_per_call)
++                items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
++                self._merge_unique(merged, seen_urls, items, target_limit)
++                if len(merged) >= target_limit:
++                    logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_budgeted", count=len(merged))
++                    return merged
+ 
+         if merged:
+-            logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_multi", count=len(merged))
++            logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_budgeted", count=len(merged))
+             return merged
+ 
+         logger.info("source_fetch_empty", source=self.name, query=query)
+         return []
+ 
++    def _allowed_search_calls(self, results_per_call: int) -> int:
++        if self._search_result_cost_usd <= 0:
++            return self._max_calls_per_topic
++        per_call_cost = results_per_call * self._search_result_cost_usd
++        if per_call_cost <= 0:
++            return self._max_calls_per_topic
++        affordable = int(self._topic_budget_usd // per_call_cost)
++        return max(1, min(self._max_calls_per_topic, affordable))
+     @staticmethod
+     def _build_queries(query: str, from_dt: datetime, to_dt: datetime) -> list[str]:
+         return build_search_plan(query, from_dt=from_dt, to_dt=to_dt, first_run=(to_dt - from_dt) > timedelta(hours=60)).query_variants
+@@ -307,12 +331,20 @@
+                 url = str(item.url) if item.url is not None else None
+                 if not url:
+                     continue
++
+                 try:
+                     response = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+-                except Exception:
+-                    continue
+-                if response.status_code >= 400:
+-                    continue
++                    if response.status_code >= 400:
++                        fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason=f"http_{response.status_code}")
++                        if fallback is not None:
++                            enriched.append(fallback)
++                        continue
++                except Exception as exc:
++                    fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason=type(exc).__name__)
++                    if fallback is not None:
++                        enriched.append(fallback)
++                    continue
++
+                 meta = extract_html_metadata(response.text)
+                 canonical_url = meta.canonical_url or self._extract_canonical_url(response.text) or str(response.url)
+                 published_at = self._extract_published_at(response.text)
+@@ -321,39 +353,93 @@
+                 if published_at is None:
+                     published_at = self._extract_last_modified(response.headers.get("last-modified"))
+                 if published_at is None and plan.first_run:
+-                    # keep a small number of high-confidence article candidates on first bootstrap runs
+                     published_at = to_dt
+                 if published_at is None:
++                    fallback = self._fallback_candidate(item, to_dt=to_dt, plan=plan, reason="missing_publish_date")
++                    if fallback is not None:
++                        enriched.append(fallback)
+                     continue
+                 if published_at.tzinfo is None:
+                     published_at = published_at.replace(tzinfo=timezone.utc)
+                 published_at = published_at.astimezone(timezone.utc)
+                 if published_at < freshness_floor:
+-                    continue
++                    self._log_rejection(plan, canonical_url, meta.title or item.title, meta.description or item.description, "outside_freshness_window")
++                    continue
++
+                 candidate_title = meta.title or item.title
+                 candidate_desc = meta.description or item.description
+                 source_language = item.source_language or meta.language or self._extract_language(response.text)
+                 parsed_url = self._safe_http_url(canonical_url)
+                 if parsed_url is None or not self._looks_like_news_article(canonical_url, candidate_title):
++                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "url_does_not_look_like_news_article")
+                     continue
+                 if article_confidence(canonical_url, candidate_title, candidate_desc) < 1:
+-                    continue
+-                if not is_candidate_article(plan, url=canonical_url, title=candidate_title, description=candidate_desc):
+-                    continue
+-                score = topic_match_score(plan, title=candidate_title, description=candidate_desc, url=canonical_url)
+-                confidence = article_confidence(canonical_url, candidate_title, candidate_desc)
+-                if score < (3 if plan.first_run and plan.topic_kind in {"city", "country", "broad_single", "entity_symbol"} else 4 if plan.first_run else 6):
+-                    continue
++                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "low_article_confidence")
++                    continue
++
++                quality = candidate_quality(plan, url=canonical_url, title=candidate_title, description=candidate_desc)
++                if not quality.accepted:
++                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, quality.reason or "rejected")
++                    continue
++
+                 enriched.append(item.model_copy(update={
+                     "url": parsed_url,
+                     "title": candidate_title,
+                     "description": candidate_desc,
+                     "published_at": published_at,
+                     "source_language": source_language,
+-                    "metadata": {**item.metadata, "canonical_url": canonical_url, "topic_match_score": score, "article_confidence": confidence},
++                    "metadata": {
++                        **item.metadata,
++                        "canonical_url": canonical_url,
++                        "topic_match_score": quality.score,
++                        "directness_score": quality.directness_score,
++                        "article_confidence": article_confidence(canonical_url, candidate_title, candidate_desc),
++                        "quality_reason": "accepted",
++                    },
+                 }))
+-        enriched.sort(key=lambda x: (int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
++        enriched.sort(key=lambda x: (int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
+         return enriched
++
++    def _fallback_candidate(self, item: RawSourceItem, *, to_dt: datetime, plan, reason: str) -> RawSourceItem | None:
++        url = str(item.url) if item.url is not None else None
++        if not url:
++            return None
++        if not self._looks_like_news_article(url, item.title):
++            self._log_rejection(plan, url, item.title, item.description, f"fallback_not_article:{reason}")
++            return None
++        quality = candidate_quality(plan, url=url, title=item.title, description=item.description)
++        if not quality.accepted or quality.directness_score < plan.minimum_directness + 2:
++            self._log_rejection(plan, url, item.title, item.description, quality.reason or f"fallback_rejected:{reason}")
++            return None
++        return item.model_copy(update={
++            "published_at": to_dt,
++            "metadata": {
++                **item.metadata,
++                "canonical_url": url,
++                "topic_match_score": quality.score,
++                "directness_score": quality.directness_score,
++                "article_confidence": article_confidence(url, item.title, item.description),
++                "metadata_fallback": True,
++                "metadata_fallback_reason": reason,
++            },
++        })
++
++    def _log_rejection(self, plan, url: str, title: str | None, description: str | None, reason: str) -> None:
++        if not self._debug_rejections:
++            return
++        quality = candidate_quality(plan, url=url, title=title, description=description)
++        logger.info(
++            "candidate_rejected",
++            source=self.name,
++            topic=plan.normalized_query,
++            topic_kind=plan.topic_kind,
++            reason=reason,
++            quality_reason=quality.reason,
++            score=quality.score,
++            directness_score=quality.directness_score,
++            url=url,
++            title=title,
++        )
+ 
+     @staticmethod
+     def _extract_canonical_url(html: str) -> str | None:
+--- a/app/search_v2/__init__.py
++++ b/app/search_v2/__init__.py
+@@ -1,2 +1,2 @@
+-from .strategy import SearchPlan, build_search_plan
+-from .article_filter import extract_html_metadata, is_candidate_article, topic_match_score, article_confidence
++from .strategy import SearchPlan, build_search_plan, classify_topic
++from .article_filter import extract_html_metadata, is_candidate_article, topic_match_score, article_confidence, candidate_quality, directness_score
+--- a/app/search_v2/article_filter.py
++++ b/app/search_v2/article_filter.py
+@@ -8,17 +8,29 @@
+ from .strategy import SearchPlan
+ 
+ _SECTION_PATTERNS = (
+-    "/all", "/latest", "/latest-news", "/archive", "/archives", "/tag/", "/tags/", "/topic/", "/topics/", "/category/", "/categories/", "/section/", "/sections/", "/topics-and-tag/"
++    "/all", "/latest", "/latest-news", "/archive", "/archives", "/tag/", "/tags/", "/topic/", "/topics/", "/category/",
++    "/categories/", "/section/", "/sections/", "/topics-and-tag/", "/search", "/sitemap"
+ )
+ _BAD_TITLE_HINTS = {
+     "category:", "tag:", "all |", "latest |", "watch", "video", "podcast", "newsletter", "live blog", "live updates",
+     "latest news", "news today", "latest headlines", "transfer rumours", "transfer rumors", "team news", "news hub"
+ }
+-_STOPWORDS = {"the","a","an","and","or","of","in","on","to","for","de","la","el","en","y","los","las","le","un","una","se","es","are","is","latest","news","update","updates","recent","today","yesterday"}
++_STOPWORDS = {
++    "the","a","an","and","or","of","in","on","to","for","de","la","el","en","y","los","las","le","un","una",
++    "se","es","are","is","latest","news","update","updates","recent","today","yesterday","city","breaking"
++}
+ _FINANCE_ONLY_HINTS = {"stock", "shares", "nasdaq", "nyse", "price target", "momentum shifts", "$", "investorplace", "motley fool", "zacks"}
+ _SPORTS_ONLY_HINTS = {"transfer", "rumours", "rumors", "lineup", "goal.com"}
+ _TEAM_GENERIC_DRIFT_HINTS = {"team spirit key to", "copa américa", "copa america", "locker room", "chemistry", "spirit key", "strong team spirit"}
+ _BUSINESS_HINTS = {"earnings", "shares", "stock", "market", "results", "guidance", "investor", "ceo"}
++_EVERGREEN_HINTS = {
++    "things to do", "what to do", "where to stay", "travel guide", "best restaurants", "best hotels", "tourist guide",
++    "weather spark", "average weather", "monthly weather", "hourly forecast", "10-day forecast", "calendar of events",
++    "tickets", "how to watch", "wiki", "explained:", "guide to", "complete guide", "preview and prediction"
++}
++_SERVICE_PAGE_HINTS = {
++    "homepage", "login", "subscribe", "sign up", "newsletter", "contact us", "privacy policy", "terms of service"
++}
+ 
+ 
+ @dataclass(slots=True)
+@@ -27,6 +39,15 @@
+     description: str | None
+     canonical_url: str | None
+     language: str | None
++
++
++@dataclass(slots=True)
++class CandidateQuality:
++    accepted: bool
++    score: int
++    directness_score: int
++    reason: str | None
++    features: dict[str, int | bool]
+ 
+ 
+ def extract_html_metadata(html_text: str) -> HtmlMetadata:
+@@ -62,28 +83,45 @@
+     return {t for t in re.findall(r"[a-zA-Z0-9а-яА-ЯёЁіІїЇєЄґҐ]+", text.lower()) if len(t) >= 3 and t not in _STOPWORDS}
+ 
+ 
++def _multiword_alt_hit(plan: SearchPlan, hay_l: str) -> int:
++    hits = 0
++    for alt in plan.alternate_terms or set():
++        alt_l = alt.lower()
++        if len(alt_l) >= 3 and alt_l in hay_l:
++            hits += 1
++    return hits
++
++
+ def topic_match_features(plan: SearchPlan, *, title: str | None, description: str | None, url: str) -> dict[str, int | bool]:
+     title_text = title or ""
+     desc_text = description or ""
+-    path_text = urlparse(url).path.replace("-", " ").replace("/", " ")
++    path_text = urlparse(url).path.replace("-", " ").replace("_", " ").replace("/", " ")
+     hay = " ".join(x for x in [title_text, desc_text, path_text] if x)
+     hay_l = hay.lower()
+     title_tokens = _meaningful_tokens(title_text)
+     desc_tokens = _meaningful_tokens(desc_text)
++    path_tokens = _meaningful_tokens(path_text)
+     all_tokens = _meaningful_tokens(hay)
+     required_hits = len(all_tokens & plan.required_terms)
+     title_hits = len(title_tokens & plan.required_terms)
+     desc_hits = len(desc_tokens & plan.required_terms)
++    path_hits = len(path_tokens & plan.required_terms)
+     semantic_hits = len(all_tokens & plan.semantic_hints)
+-    alt_hits = len(all_tokens & (plan.alternate_terms or set()))
++    alt_token_hits = len(all_tokens & (plan.alternate_terms or set()))
++    alt_phrase_hits = _multiword_alt_hit(plan, hay_l)
+     exact_phrase = bool(plan.exact_phrase and plan.exact_phrase in hay_l)
++    positive_context_hits = sum(1 for term in plan.positive_context_terms if term.lower() in hay_l)
++    negative_context_hits = sum(1 for term in plan.negative_context_terms if term.lower() in hay_l)
+     return {
+         "required_hits": required_hits,
+         "title_hits": title_hits,
+         "desc_hits": desc_hits,
++        "path_hits": path_hits,
+         "semantic_hits": semantic_hits,
+-        "alternate_hits": alt_hits,
++        "alternate_hits": alt_token_hits + alt_phrase_hits,
+         "exact_phrase": exact_phrase,
++        "positive_context_hits": positive_context_hits,
++        "negative_context_hits": negative_context_hits,
+     }
+ 
+ 
+@@ -91,76 +129,135 @@
+     f = topic_match_features(plan, title=title, description=description, url=url)
+     score = (
+         int(f["required_hits"]) * 5
+-        + int(f["title_hits"]) * 4
++        + int(f["title_hits"]) * 5
+         + int(f["desc_hits"]) * 2
+         + int(f["semantic_hits"]) * 2
+-        + int(f["alternate_hits"]) * 3
++        + int(f["alternate_hits"]) * 4
++        + int(f["positive_context_hits"]) * 4
+     )
+     if f["exact_phrase"]:
+-        score += 8
++        score += 10
++    if int(f["negative_context_hits"]) > 0:
++        score -= 10 * int(f["negative_context_hits"])
+     return score
+ 
+ 
+-def is_candidate_article(plan: SearchPlan, *, url: str, title: str | None, description: str | None) -> bool:
++def directness_score(plan: SearchPlan, *, title: str | None, description: str | None, url: str) -> int:
++    f = topic_match_features(plan, title=title, description=description, url=url)
++    score = (
++        int(f["title_hits"]) * 8
++        + int(f["desc_hits"]) * 3
++        + int(f["alternate_hits"]) * 5
++        + int(f["semantic_hits"]) * 1
++        + int(f["positive_context_hits"]) * 3
++    )
++    if f["exact_phrase"]:
++        score += 12
++    if int(f["required_hits"]) > 0 and (int(f["title_hits"]) > 0 or int(f["desc_hits"]) > 0):
++        score += 4
++    if int(f["path_hits"]) > 0 and int(f["title_hits"]) == 0 and int(f["desc_hits"]) == 0:
++        score -= 4
++    score -= 12 * int(f["negative_context_hits"])
++    return score
++
++
++def _contains_any(haystack: str, needles: set[str]) -> bool:
++    return any(n in haystack for n in needles)
++
++
++def rejection_reason(plan: SearchPlan, *, url: str, title: str | None, description: str | None) -> str | None:
+     parsed = urlparse(url)
+     path = parsed.path.lower().rstrip("/")
+     title_norm = (title or "").lower()
+     host = parsed.netloc.lower()
+     desc_norm = (description or "").lower()
+-
++    hay = f"{title_norm} {desc_norm} {host} {path}"
++
++    if not parsed.scheme.startswith("http") or not host:
++        return "invalid_url"
+     if any(p in path for p in _SECTION_PATTERNS):
+-        return False
++        return "section_or_index_page"
+     if any(h in title_norm for h in _BAD_TITLE_HINTS):
+-        return False
++        return "bad_title_hint"
+     if any(seg in path for seg in ("/live/", "/live-blog", "/liveblog", "/video/", "/videos/", "/watch", "/podcast", "/audio/", "/gallery/")):
+-        return False
++        return "non_article_media_or_live_page"
+     shallow = path.count("/") < 2 or path in {"/news", "/latest-news", "/latest", "/world", "/sport", "/sports", "/politics", "/business", "/markets"}
+     if shallow and not re.search(r"/20\d{2}/", path) and len(path) < 30:
+-        return False
++        return "shallow_non_article_url"
+     if shallow and ("latest news" in title_norm or "news today" in title_norm or "headlines" in title_norm):
+-        return False
+-    if host.endswith("theguardian.com") and path.endswith("/all"):
+-        return False
++        return "news_hub_page"
+     if "| the guardian" in title_norm and (path.endswith("/all") or path.endswith("/latest")):
+-        return False
+-    if plan.topic_kind in {"entity_symbol", "team_org"} and any(h in (title_norm + " " + desc_norm + " " + host) for h in _FINANCE_ONLY_HINTS) and not any(h in plan.normalized_query for h in _BUSINESS_HINTS):
+-        return False
++        return "section_or_index_page"
++
++    if plan.topic_kind != "weather_like" and _contains_any(hay, _EVERGREEN_HINTS):
++        return "evergreen_or_service_content"
++    if _contains_any(hay, _SERVICE_PAGE_HINTS):
++        return "evergreen_or_service_content"
++
++    features = topic_match_features(plan, title=title, description=description, url=url)
++    required_hits = int(features["required_hits"])
++    title_hits = int(features["title_hits"])
++    desc_hits = int(features["desc_hits"])
++    semantic_hits = int(features["semantic_hits"])
++    alt_hits = int(features["alternate_hits"])
++    positive_context_hits = int(features["positive_context_hits"])
++    negative_context_hits = int(features["negative_context_hits"])
++
++    if negative_context_hits > 0 and positive_context_hits == 0 and title_hits == 0:
++        return "wrong_entity_context"
++
++    if plan.strict_phrase and not (bool(features["exact_phrase"]) or title_hits > 0 or desc_hits > 0 or alt_hits > 0):
++        return "missing_strict_phrase"
++    if plan.topic_kind == "conflict" and semantic_hits == 0 and not bool(features["exact_phrase"]) and title_hits == 0:
++        return "low_conflict_directness"
++
++    if plan.topic_kind in {"entity_symbol", "team_org"} and any(h in hay for h in _FINANCE_ONLY_HINTS) and not any(h in plan.normalized_query for h in _BUSINESS_HINTS):
++        return "finance_only_drift"
+     if plan.topic_kind == "city" and any(h in title_norm for h in _SPORTS_ONLY_HINTS) and "fc" not in plan.normalized_query:
+-        return False
++        return "sports_drift_for_city"
+     if plan.topic_kind == "team_org":
+-        team_hay = f"{title_norm} {desc_norm} {host}"
+-        if any(h in team_hay for h in _TEAM_GENERIC_DRIFT_HINTS):
+-            return False
+-        if plan.exact_phrase and plan.exact_phrase not in team_hay and len(plan.required_terms) >= 2:
+-            return False
+-
+-    f = topic_match_features(plan, title=title, description=description, url=url)
+-    required_hits = int(f["required_hits"])
+-    title_hits = int(f["title_hits"])
+-    desc_hits = int(f["desc_hits"])
+-    semantic_hits = int(f["semantic_hits"])
+-    alt_hits = int(f["alternate_hits"])
+-    exact_phrase = bool(f["exact_phrase"])
+-
+-    if plan.strict_phrase and not (exact_phrase or title_hits > 0 or desc_hits > 0 or alt_hits > 0):
+-        return False
+-    if plan.topic_kind == "conflict" and semantic_hits == 0 and not exact_phrase and title_hits == 0:
+-        return False
++        if any(h in hay for h in _TEAM_GENERIC_DRIFT_HINTS):
++            return "generic_phrase_not_entity"
++        if plan.exact_phrase and plan.exact_phrase not in hay and len(plan.required_terms) >= 2:
++            return "missing_team_phrase"
+ 
+     score = topic_match_score(plan, title=title, description=description, url=url)
+-    threshold = 3 if plan.first_run and plan.broad_topic else 5
++    direct = directness_score(plan, title=title, description=description, url=url)
++    threshold = 4 if plan.first_run and plan.broad_topic else 6
+     if plan.topic_kind in {"city", "country"}:
+-        threshold = 2 if plan.first_run else 4
++        threshold = 3 if plan.first_run else 5
+     if score < threshold:
+-        return False
+-
+-    if required_hits == 0 and alt_hits == 0 and not exact_phrase and semantic_hits > 0 and title_hits == 0 and desc_hits == 0:
+-        return False
++        return "topic_score_below_threshold"
++    if plan.topic_kind in {"country", "city", "geo_region", "person", "business", "crypto"} and title_hits == 0 and semantic_hits == 0:
++        return "indirect_relevance"
++    if direct < plan.minimum_directness:
++        return "low_directness"
++
++    if required_hits == 0 and alt_hits == 0 and not bool(features["exact_phrase"]) and semantic_hits > 0 and title_hits == 0 and desc_hits == 0:
++        return "semantic_only_match"
+     if title_hits == 0 and required_hits == 0 and alt_hits == 0 and len(_meaningful_tokens(desc_norm)) < 5:
+-        return False
++        return "no_direct_topic_evidence"
+     if article_confidence(url, title, description) < 1:
+-        return False
+-    return True
++        return "low_article_confidence"
++    return None
++
++
++def candidate_quality(plan: SearchPlan, *, url: str, title: str | None, description: str | None) -> CandidateQuality:
++    features = topic_match_features(plan, title=title, description=description, url=url)
++    score = topic_match_score(plan, title=title, description=description, url=url)
++    direct = directness_score(plan, title=title, description=description, url=url)
++    reason = rejection_reason(plan, url=url, title=title, description=description)
++    return CandidateQuality(
++        accepted=reason is None,
++        score=score,
++        directness_score=direct,
++        reason=reason,
++        features=features,
++    )
++
++
++def is_candidate_article(plan: SearchPlan, *, url: str, title: str | None, description: str | None) -> bool:
++    return candidate_quality(plan, url=url, title=title, description=description).accepted
+ 
+ 
+ def article_confidence(url: str, title: str | None, description: str | None) -> int:
+@@ -183,4 +280,6 @@
+         score += 1
+     if 'latest news' in title_norm or 'news today' in title_norm or 'headlines' in title_norm:
+         score -= 4
++    if any(h in f"{title_norm} {desc_norm} {path}" for h in _EVERGREEN_HINTS):
++        score -= 4
+     return score
+--- a/app/search_v2/strategy.py
++++ b/app/search_v2/strategy.py
+@@ -1,6 +1,6 @@
+ from __future__ import annotations
+ 
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from datetime import datetime
+ import re
+ from typing import Final
+@@ -22,39 +22,67 @@
+     strict_phrase: bool = False
+     max_variants: int = 4
+     alternate_terms: set[str] | None = None
++    positive_context_terms: set[str] = field(default_factory=set)
++    negative_context_terms: set[str] = field(default_factory=set)
++    minimum_directness: int = 6
+ 
+ 
+ _WEATHER_HINTS: Final = {"weather", "temperature", "forecast", "rain", "snow", "storm", "heatwave", "wind"}
+ _UPDATE_HINTS: Final = {"update", "updates", "patch", "patches", "patch notes", "changelog", "release notes", "official update"}
+ _CONFLICT_HINTS: Final = {"war", "conflict", "invasion", "ceasefire", "frontline", "military", "strike", "aid"}
+-_SPORT_HINTS: Final = {"fc", "club", "transfer", "injury", "league", "match", "coach", "goal"}
+-_ESPORTS_HINTS: Final = {"esports", "roster", "tournament", "major", "valve", "steam", "dota", "cs2", "counter-strike", "counter strike", "hltv", "bo3", "ti", "qualifier"}
++_SPORT_HINTS: Final = {"fc", "club", "transfer", "injury", "league", "match", "coach", "goal", "nba", "nfl", "mlb", "nhl", "epl"}
++_ESPORTS_HINTS: Final = {"esports", "roster", "tournament", "major", "valve", "steam", "dota", "cs2", "counter-strike", "counter strike", "hltv", "bo3", "qualifier"}
+ _TEAM_ENTITY_MARKERS: Final = {"team", "squad", "roster", "club", "org", "organization"}
+-_BUSINESS_HINTS: Final = {"earnings", "shares", "stock", "market", "results", "guidance", "investor", "ceo"}
+-_STOP: Final = {"the", "and", "for", "with", "latest", "news", "new", "about", "from"}
+-
+-_KNOWN_BRANDS: Final = {"bmw", "vw", "volkswagen", "toyota", "tesla", "apple", "bitcoin", "cs2", "dota 2", "dota"}
++_BUSINESS_HINTS: Final = {"earnings", "shares", "stock", "market", "results", "guidance", "investor", "ceo", "merger", "acquisition"}
++_CRYPTO_HINTS: Final = {"bitcoin", "ethereum", "solana", "crypto", "cryptocurrency", "blockchain", "token", "defi", "etf"}
++_ENTERTAINMENT_HINTS: Final = {"movie", "film", "series", "tv", "show", "studio", "streaming", "actor", "actress", "album", "music"}
++_GEO_REGION_HINTS: Final = {"ocean", "sea", "river", "gulf", "canal", "strait", "island", "islands", "mountain", "mountains", "region", "basin"}
++_COMPANY_SUFFIXES: Final = {"inc", "corp", "ltd", "plc", "ag", "sa", "group", "holdings", "company"}
++_STOP: Final = {"the", "and", "for", "with", "latest", "news", "new", "about", "from", "city"}
++
++
++_KNOWN_BRANDS: Final = {
++    "apple", "tesla", "microsoft", "google", "alphabet", "amazon", "meta", "netflix", "nvidia",
++    "bmw", "mercedes", "volkswagen", "toyota", "samsung", "sony", "disney",
++}
++_KNOWN_CRYPTO: Final = {"bitcoin", "ethereum", "solana", "xrp", "cardano", "dogecoin", "binance", "toncoin", "polkadot"}
+ 
+ _COUNTRY_NAMES: Final = {
+     "usa", "us", "united states", "uk", "united kingdom", "england", "ukraine", "germany", "france", "japan", "china",
+-    "zimbabwe", "russia", "iran", "spain", "italy", "poland", "georgia", "israel", "lebanon", "pakistan",
+-}
+-
++    "zimbabwe", "russia", "iran", "spain", "italy", "poland", "georgia", "israel", "lebanon", "pakistan", "india",
++    "canada", "mexico", "brazil", "argentina", "turkey", "australia", "south korea", "north korea", "south africa",
++}
++
++# Small canonical alias table, not topic-specific behavior. It fixes common transliteration/alternate spellings.
+ _CITY_ALIASES: Final[dict[str, set[str]]] = {
++    "kyiv": {"kyiv", "kiev", "київ", "киев"},
+     "lviv": {"lviv", "львів", "львов", "lvov"},
+     "kharkiv": {"kharkiv", "kharkov", "харків", "харьков"},
+-    "barcelona": {"barcelona", "barca"},
+-    "kyiv": {"kyiv", "kiev", "київ", "киев"},
++    "odesa": {"odesa", "odessa", "одеса", "одесса"},
++    "dnipro": {"dnipro", "dnieper", "дніпро", "днепр"},
++}
++
++_CITY_CONTEXTS: Final[dict[str, dict[str, set[str]]]] = {
++    "kyiv": {"positive": {"ukraine", "ukrainian", "kyiv oblast", "capital"}, "negative": {"kiev chicken"}},
++    "lviv": {"positive": {"ukraine", "ukrainian", "lviv oblast"}, "negative": set()},
++    "kharkiv": {"positive": {"ukraine", "ukrainian", "kharkiv oblast"}, "negative": set()},
++    "odesa": {"positive": {"ukraine", "ukrainian", "black sea", "odesa oblast"}, "negative": {"texas", "florida", "missouri", "delaware", "permian", "high school", "weather spark"}},
++    "dnipro": {"positive": {"ukraine", "ukrainian", "dnipropetrovsk"}, "negative": set()},
+ }
+ 
+ _AMBIGUOUS_ENTITY_HINTS: Final[dict[str, dict[str, set[str]]]] = {
+-    "barcelona": {
+-        "city": {"city", "mayor", "council", "metro", "airport", "protest", "festival", "tourism"},
+-        "club": {"fc", "club", "team", "match", "transfer", "coach", "liga"},
++    "georgia": {
++        "country": {"tbilisi", "caucasus", "georgian government", "ruling party", "parliament"},
++        "us_state": {"atlanta", "governor", "us state", "state legislature", "county"},
+     },
+-    "navi": {
+-        "esports": {"esports", "cs2", "counter-strike", "team", "roster", "tournament"},
+-        "market": {"stock", "shares", "nasdaq", "market", "analysis", "investor"},
++    "jaguar": {
++        "company": {"automaker", "electric vehicle", "car", "land rover", "model"},
++        "animal": {"wildlife", "conservation", "habitat"},
++        "sports": {"nfl", "jacksonville", "quarterback", "coach"},
++    },
++    "apple": {
++        "company": {"iphone", "mac", "ios", "app store", "earnings", "shares"},
++        "food": {"fruit", "orchard", "crop", "harvest"},
+     },
+ }
+ 
+@@ -76,6 +104,19 @@
+ 
+ def _tokens(query: str) -> set[str]:
+     return {tok for tok in re.findall(r"[a-zA-Z0-9а-яА-ЯёЁіІїЇєЄґҐ]+", query.lower()) if len(tok) >= 3 and tok not in _STOP}
++
++
++def _looks_like_person_name(raw_query: str, normalized_query: str) -> bool:
++    words = [w for w in re.findall(r"[A-Za-z][A-Za-z'-]+", raw_query.strip()) if w.lower() not in _STOP]
++    if len(words) not in {2, 3}:
++        return False
++    lower_words = {w.lower().strip(".'") for w in words}
++    if lower_words & _COMPANY_SUFFIXES:
++        return False
++    if normalized_query in _COUNTRY_NAMES or normalized_query in _KNOWN_BRANDS or normalized_query in _KNOWN_CRYPTO:
++        return False
++    capitalized = sum(1 for w in words if w[:1].isupper())
++    return capitalized >= 1 or len(words) == 2
+ 
+ 
+ def classify_topic(query: str) -> str:
+@@ -85,6 +126,8 @@
+         return "weather_like"
+     if any(h in q for h in _UPDATE_HINTS):
+         return "game_updates"
++    if q in _KNOWN_CRYPTO or any(h in q for h in _CRYPTO_HINTS):
++        return "crypto"
+     if any(h in q for h in _ESPORTS_HINTS):
+         return "esports"
+     if any(h in q for h in _CONFLICT_HINTS):
+@@ -95,11 +138,19 @@
+         return "country"
+     if q in _CITY_ALIASES:
+         return "city"
++    if any(h in q for h in _GEO_REGION_HINTS):
++        return "geo_region"
++    if any(h in q for h in _ENTERTAINMENT_HINTS):
++        return "entertainment"
++    if any(h in q for h in _BUSINESS_HINTS) or q in _KNOWN_BRANDS:
++        return "business"
+     words = q.split()
+     if len(words) <= 3 and (words[:1] and words[0] in _TEAM_ENTITY_MARKERS):
+         return "team_org"
+-    if len(words) <= 2 and all(w[:1].isalpha() for w in words) and any(ch.isupper() for ch in query) and q not in _COUNTRY_NAMES and q not in _KNOWN_BRANDS:
++    if len(words) <= 2 and all(w[:1].isalpha() for w in words) and query.strip().isupper() and q not in _COUNTRY_NAMES and q not in _KNOWN_BRANDS:
+         return "team_org"
++    if _looks_like_person_name(query, q):
++        return "person"
+     if token_count <= 1 and query.strip().isupper() and len(query.strip()) >= 3 and q not in _KNOWN_BRANDS:
+         return "entity_symbol"
+     if token_count <= 1:
+@@ -117,15 +168,15 @@
+ 
+ 
+ def _semantic_hints_for_query(q: str, kind: str) -> set[str]:
+-    hints: set[str] = set()
++    hints: set[str] = {"report", "development", "official"}
+     if kind == "game_updates":
+-        hints |= {"patch", "notes", "official", "release", "changes", "steam", "version", "changelog"}
++        hints |= {"patch", "notes", "official", "release", "changes", "version", "changelog"}
+     elif kind == "conflict":
+         hints |= {"war", "strike", "troops", "aid", "ceasefire", "drone", "missile", "frontline"}
+     elif kind == "sports":
+         hints |= {"match", "transfer", "injury", "coach", "league", "win", "defeat", "club"}
+     elif kind == "esports":
+-        hints |= {"esports", "roster", "tournament", "team", "valve", "steam", "patch", "major"}
++        hints |= {"esports", "roster", "tournament", "team", "major", "qualifier", "match"}
+     elif kind == "team_org":
+         hints |= {"official", "team", "organization", "roster", "esports", "club", "announcement"}
+     elif kind == "weather_like":
+@@ -134,12 +185,18 @@
+         hints |= {"official", "organization", "company", "team", "brand", "statement", "results", "launch"}
+     elif kind == "city":
+         hints |= {"city", "region", "mayor", "council", "infrastructure", "incident", "local", "official"}
++    elif kind == "geo_region":
++        hints |= {"environment", "shipping", "security", "weather", "scientists", "islands", "marine", "climate"}
+     elif kind == "country":
+         hints |= {"politics", "economy", "government", "security", "official", "development"}
+-    elif kind.startswith("broad"):
+-        hints |= {"headline", "report", "development", "official", "industry", "policy", "launch", "results", "statement"}
+-    else:
+-        hints |= {"headline", "report", "development", "official"}
++    elif kind == "crypto":
++        hints |= {"crypto", "blockchain", "market", "etf", "regulation", "exchange", "protocol"}
++    elif kind == "business":
++        hints |= {"earnings", "company", "launch", "product", "shares", "regulation", "deal"}
++    elif kind == "person":
++        hints |= {"statement", "company", "lawsuit", "interview", "announcement", "profile", "deal"}
++    elif kind == "entertainment":
++        hints |= {"film", "series", "studio", "release", "box office", "streaming", "production"}
+     return {h.lower() for h in hints}
+ 
+ 
+@@ -149,87 +206,100 @@
+     return {q}
+ 
+ 
++def _context_terms(q: str, kind: str) -> tuple[set[str], set[str]]:
++    positive: set[str] = set()
++    negative: set[str] = set()
++    if kind == "city":
++        context = _CITY_CONTEXTS.get(q)
++        if context:
++            positive |= context.get("positive", set())
++            negative |= context.get("negative", set())
++    ambiguous = _AMBIGUOUS_ENTITY_HINTS.get(q)
++    if ambiguous:
++        for hints in ambiguous.values():
++            positive |= hints
++    return positive, negative
++
++
++def _minimum_directness(kind: str, first_run: bool, required_terms: set[str]) -> int:
++    if kind in {"city", "country", "geo_region", "person", "business", "crypto"}:
++        return 7 if not first_run else 5
++    if kind in {"team_org", "entity_symbol"}:
++        return 8 if not first_run else 6
++    if len(required_terms) <= 1:
++        return 6 if first_run else 7
++    return 7 if first_run else 9
++
++
+ def build_search_plan(query: str, *, from_dt: datetime, to_dt: datetime, first_run: bool) -> SearchPlan:
+     q = canonicalize_topic(query)
+     kind = classify_topic(query)
+-    broad = kind in {"broad_single", "broad_dual", "general_news", "entity_symbol", "country", "city"}
++    broad = kind in {"broad_single", "broad_dual", "general_news", "entity_symbol", "country", "city", "geo_region", "person", "business", "crypto"}
+     freshness = _freshness_hint(from_dt, to_dt, first_run)
+     required = _tokens(q)
+     soft = set(required)
+     exact_phrase = q if len(q) >= 3 else None
+-    strict_phrase = len(required) <= 1 and kind in {"weather_like"}
++    strict_phrase = len(required) <= 1 and kind in {"weather_like", "entity_symbol"}
+     semantic_hints = _semantic_hints_for_query(q, kind)
+     alternates = _alternate_terms(q)
++    positive_context, negative_context = _context_terms(q, kind)
+ 
+     variants: list[str] = []
+     quoted = f'"{q}"' if exact_phrase else q
+-    variants.extend([quoted, f'{q} news', f'{q} latest news {freshness}'])
++    variants.extend([f'{quoted} latest news {freshness}', f'{quoted} breaking news {freshness}'])
+ 
+     if kind == "game_updates":
+-        variants.extend([f'{q} official update {freshness}', f'{q} patch notes {freshness}', f'{q} changelog {freshness}'])
++        variants.extend([f'{quoted} official update {freshness}', f'{quoted} patch notes {freshness}', f'{quoted} changelog {freshness}'])
+         soft |= {"update", "patch", "notes", "official", "changelog"}
+     elif kind == "conflict":
+-        variants.extend([f'{q} war updates {freshness}', f'{q} strikes aid ceasefire {freshness}', f'{q} frontline drone missile {freshness}'])
++        variants.extend([f'{quoted} war updates {freshness}', f'{quoted} strikes aid ceasefire {freshness}', f'{quoted} frontline security {freshness}'])
+         soft |= {"war", "strike", "aid", "ceasefire", "frontline"}
+     elif kind == "sports":
+-        variants.extend([f'{q} latest match transfer injury news {freshness}', f'{q} official club latest {freshness}'])
++        variants.extend([f'{quoted} match transfer injury news {freshness}', f'{quoted} official club latest {freshness}'])
+         soft |= {"match", "transfer", "injury", "club"}
+     elif kind == "esports":
+-        variants.extend([
+-            f'{q} official update patch tournament {freshness}',
+-            f'{q} esports roster tournament latest {freshness}',
+-            f'{q} valve steam competitive latest {freshness}',
+-        ])
+-        soft |= {"esports", "update", "patch", "tournament", "roster", "valve", "steam"}
++        variants.extend([f'{quoted} esports roster tournament latest {freshness}', f'{quoted} competitive match announcement {freshness}', f'{quoted} official team update {freshness}'])
++        soft |= {"esports", "tournament", "roster", "team", "match", "announcement"}
+     elif kind == "team_org":
+-        variants.extend([
+-            f'"{q}" official team organization latest {freshness}',
+-            f'"{q}" roster announcement match latest {freshness}',
+-            f'"{q}" esports team latest {freshness}',
+-        ])
+-        soft |= {"official", "team", "organization", "roster", "announcement", "esports"}
++        variants.extend([f'{quoted} official team organization latest {freshness}', f'{quoted} roster announcement match latest {freshness}', f'{quoted} team news latest {freshness}'])
++        soft |= {"official", "team", "organization", "roster", "announcement"}
+     elif kind == "weather_like":
+-        variants.extend([f'{q} severe weather news {freshness}', f'{q} flood drought storm news {freshness}'])
++        variants.extend([f'{quoted} severe weather news {freshness}', f'{quoted} flood drought storm news {freshness}'])
+     elif kind == "city":
+-        variants.extend([
+-            f'{q} city latest developments {freshness}',
+-            f'{q} local government transport incident {freshness}',
+-            f'{q} region breaking news {freshness}',
+-            f'{q} Reuters AP BBC latest {freshness}',
+-        ])
+-        soft |= {"city", "region", "local", "incident", "government"}
++        variants.extend([f'{quoted} city latest developments {freshness}', f'{quoted} local government transport incident {freshness}', f'{quoted} region breaking news {freshness}', f'{quoted} Reuters AP BBC latest {freshness}'])
++        soft |= {"city", "region", "local", "incident", "government"} | positive_context
+     elif kind == "country":
+-        variants.extend([
+-            f'{q} politics economy major developments {freshness}',
+-            f'{q} headlines major stories {freshness}',
+-            f'{q} Reuters AP BBC latest {freshness}',
+-            f'{q} breaking news today {freshness}',
+-        ])
+-        soft |= {"politics", "economy", "government"}
++        variants.extend([f'{quoted} politics economy major developments {freshness}', f'{quoted} government security latest {freshness}', f'{quoted} Reuters AP BBC latest {freshness}', f'{quoted} breaking news today {freshness}'])
++        soft |= {"politics", "economy", "government", "security"}
++    elif kind == "geo_region":
++        variants.extend([f'{quoted} environment shipping security latest {freshness}', f'{quoted} climate marine islands developments {freshness}', f'{quoted} Reuters AP BBC latest {freshness}'])
++        soft |= {"environment", "shipping", "security", "climate", "marine", "islands"}
++    elif kind == "crypto":
++        variants.extend([f'{quoted} crypto market regulation latest {freshness}', f'{quoted} blockchain protocol exchange latest {freshness}', f'{quoted} Reuters Bloomberg CoinDesk latest {freshness}'])
++        soft |= {"crypto", "blockchain", "market", "regulation", "exchange", "protocol"}
++    elif kind == "business":
++        variants.extend([f'{quoted} company earnings product launch latest {freshness}', f'{quoted} regulation deal market latest {freshness}', f'{quoted} Reuters Bloomberg CNBC latest {freshness}'])
++        soft |= {"company", "earnings", "product", "launch", "shares", "deal"}
++    elif kind == "person":
++        variants.extend([f'{quoted} statement lawsuit company latest {freshness}', f'{quoted} interview announcement latest {freshness}', f'{quoted} Reuters AP BBC latest {freshness}'])
++        soft |= {"statement", "lawsuit", "company", "announcement", "interview"}
++    elif kind == "entertainment":
++        variants.extend([f'{quoted} film series studio latest {freshness}', f'{quoted} release production box office latest {freshness}', f'{quoted} entertainment industry news {freshness}'])
++        soft |= {"film", "series", "studio", "release", "production"}
+     elif kind == "entity_symbol":
+-        variants.extend([
+-            f'"{q}" official statement organization company team {freshness}',
+-            f'"{q}" latest developments {freshness}',
+-            f'"{q}" Reuters AP latest {freshness}',
+-        ])
++        variants.extend([f'{quoted} official statement organization company team {freshness}', f'{quoted} latest developments {freshness}', f'{quoted} Reuters AP latest {freshness}'])
+         soft |= {"official", "organization", "company", "team", "brand"}
+     elif kind == "broad_single":
+-        variants.extend([
+-            f'{q} 7 series i7 facelift latest' if q == 'bmw' else f'{q} major developments {freshness}',
+-            f'{q} official statement press release {freshness}',
+-            f'{q} Reuters AP BBC latest {freshness}',
+-            f'{q} industry market product launch {freshness}',
+-        ])
++        variants.extend([f'{quoted} major developments {freshness}', f'{quoted} official statement press release {freshness}', f'{quoted} Reuters AP BBC latest {freshness}', f'{quoted} industry policy market latest {freshness}'])
+     elif kind == "broad_dual":
+-        variants.extend([f'{q} key developments {freshness}', f'{q} major stories {freshness}'])
++        variants.extend([f'{quoted} key developments {freshness}', f'{quoted} major stories {freshness}', f'{quoted} Reuters AP latest {freshness}'])
+     else:
+-        variants.extend([f'{q} recent developments article {freshness}', f'{q} major stories {freshness}'])
+-
+-    # lightweight ambiguity support without hardcoding entire behavior
++        variants.extend([f'{quoted} recent developments article {freshness}', f'{quoted} major stories {freshness}', f'{quoted} Reuters AP BBC latest {freshness}'])
++
+     ambiguous = _AMBIGUOUS_ENTITY_HINTS.get(q)
+     if ambiguous:
+         for hints in ambiguous.values():
+-            variants.append(f'{q} ' + ' '.join(sorted(hints)) + f' {freshness}')
++            variants.append(f'{quoted} ' + ' '.join(sorted(hints)) + f' {freshness}')
+             soft |= hints
+ 
+     deduped: list[str] = []
+@@ -240,7 +310,7 @@
+             seen.add(k)
+             deduped.append(v)
+ 
+-    max_variants = 4 if kind in {"game_updates", "sports", "esports", "team_org"} else 6 if kind in {"city", "country", "broad_single", "entity_symbol"} else 5
++    max_variants = 4 if kind in {"game_updates", "sports", "esports", "team_org"} else 6 if broad else 5
+     return SearchPlan(
+         raw_query=query,
+         normalized_query=q,
+@@ -256,4 +326,7 @@
+         strict_phrase=strict_phrase,
+         max_variants=max_variants,
+         alternate_terms=alternates,
++        positive_context_terms=positive_context,
++        negative_context_terms=negative_context,
++        minimum_directness=_minimum_directness(kind, first_run, required),
+     )
+--- a/app/shared/settings.py
++++ b/app/shared/settings.py
+@@ -21,7 +21,14 @@
+     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+     openrouter_default_model: str = "openai/gpt-4.1-mini"
+     openrouter_search_model: str | None = None
+-    openrouter_web_search_max_results: int = 5
++    openrouter_web_search_max_results: int = 16
++    openrouter_topic_budget_usd: float = 0.07
++    openrouter_search_result_cost_usd: float = 0.004
++    openrouter_web_search_results_per_call: int = 8
++    openrouter_web_search_max_calls_per_topic: int = 2
++    openrouter_min_quality_candidates: int = 4
++    openrouter_allow_plugin_fallback: bool = False
++    openrouter_debug_rejections: bool = True
+ 
+     enable_openrouter_web_search_source: bool = True
+     enable_mock_source: bool = False
+@@ -33,6 +40,7 @@
+     story_memory_days: int = 7
+     max_articles_per_provider: int = 100
+     max_stories_per_post: int = 5
++    llm_relevance_max_checks_per_topic: int = 8
+     publish_empty_digest: bool = False
+     scheduler_refresh_seconds: int = 10
+     scheduler_job_misfire_grace_seconds: int = 300
+--- /dev/null
++++ b/tests/test_quality_engine_v5.py
+@@ -0,0 +1,61 @@
++from datetime import datetime, timedelta, timezone
++
++from app.search_v2.article_filter import candidate_quality, is_candidate_article
++from app.search_v2.strategy import build_search_plan, classify_topic
++
++
++def _plan(query: str):
++    now = datetime.now(tz=timezone.utc)
++    return build_search_plan(query, from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++
++
++def test_common_geo_region_is_not_treated_as_person() -> None:
++    assert classify_topic("Pacific Ocean") == "geo_region"
++
++
++def test_indirect_country_article_is_rejected_locally() -> None:
++    plan = _plan("Iran")
++    assert not is_candidate_article(
++        plan,
++        url="https://example.com/2026/04/23/us-retail-sales-gas-prices",
++        title="US retail sales slow as gas prices rise",
++        description="Oil markets were affected by tensions in the Middle East, including Iran.",
++    )
++    quality = candidate_quality(
++        plan,
++        url="https://example.com/2026/04/23/us-retail-sales-gas-prices",
++        title="US retail sales slow as gas prices rise",
++        description="Oil markets were affected by tensions in the Middle East, including Iran.",
++    )
++    assert quality.reason == "indirect_relevance"
++
++
++def test_city_wrong_context_is_rejected() -> None:
++    plan = _plan("Odessa")
++    assert plan.normalized_query == "odesa"
++    assert not is_candidate_article(
++        plan,
++        url="https://example.com/2026/04/23/odessa-texas-high-school-baseball",
++        title="Odessa Texas high school baseball team reaches playoffs",
++        description="Local sports in Odessa, Texas.",
++    )
++
++
++def test_evergreen_guide_is_rejected_for_news_digest() -> None:
++    plan = _plan("Rome city")
++    assert not is_candidate_article(
++        plan,
++        url="https://example.com/travel/2026/04/23/things-to-do-in-rome",
++        title="Things to do in Rome this weekend",
++        description="Travel guide with best restaurants and hotels.",
++    )
++
++
++def test_direct_business_news_is_accepted() -> None:
++    plan = _plan("BMW")
++    assert is_candidate_article(
++        plan,
++        url="https://example.com/business/2026/04/23/bmw-opens-new-battery-plant",
++        title="BMW opens new battery plant as EV production expands",
++        description="The company said the new factory will support upcoming electric models.",
++    )

@@ -1,0 +1,1330 @@
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/.env.example newsbot_v5_3_single_run_orchestrator/.env.example
+--- v52_clean_for_diff/.env.example	2026-04-26 08:55:11.709296414 +0000
++++ newsbot_v5_3_single_run_orchestrator/.env.example	2026-04-26 09:33:05.613657438 +0000
+@@ -14,12 +14,12 @@
+ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+ OPENROUTER_DEFAULT_MODEL=openai/gpt-4.1-mini
+ OPENROUTER_SEARCH_MODEL=
+-OPENROUTER_WEB_SEARCH_MAX_RESULTS=16
++OPENROUTER_WEB_SEARCH_MAX_RESULTS=15
+ OPENROUTER_TOPIC_BUDGET_USD=0.07
+ OPENROUTER_SEARCH_RESULT_COST_USD=0.004
+-OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=8
+-OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=2
+-OPENROUTER_MIN_QUALITY_CANDIDATES=4
++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=5
++OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=3
++OPENROUTER_MIN_QUALITY_CANDIDATES=3
+ OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
+ OPENROUTER_DEBUG_REJECTIONS=true
+ OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
+@@ -49,4 +49,9 @@
+ OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
+ OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_DIRECTNESS=12
+ OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_CONFIDENCE=2
+-OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=2
++
++# v5.3 single-run adaptive search
++OPENROUTER_ADAPTIVE_TARGET_CANDIDATES=3
++OPENROUTER_MIN_SEARCH_PASSES=2
++IMMEDIATE_REPEAT_GUARD_MINUTES=15
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/ADDED_FILES_V5_3.md newsbot_v5_3_single_run_orchestrator/ADDED_FILES_V5_3.md
+--- v52_clean_for_diff/ADDED_FILES_V5_3.md	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/ADDED_FILES_V5_3.md	2026-04-26 09:38:25.824938862 +0000
+@@ -0,0 +1,12 @@
++# Added files in v5.3
++
++- tests/test_quality_engine_v53.py
++- QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++- START_HERE_V5_3_RU.md
++- TEST_REPORT_V5_3.md
++- PATCH_V5_2_TO_V5_3.diff
++- MANIFEST_V5_2_BEFORE_V5_3.txt
++- MANIFEST_V5_3_AFTER.txt
++- CHANGED_FILES_V5_3.md
++- ADDED_FILES_V5_3.md
++- REMOVED_FILES_V5_3.md
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/CHANGED_FILES_V5_3.md newsbot_v5_3_single_run_orchestrator/CHANGED_FILES_V5_3.md
+--- v52_clean_for_diff/CHANGED_FILES_V5_3.md	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/CHANGED_FILES_V5_3.md	2026-04-26 09:38:25.814805978 +0000
+@@ -0,0 +1,9 @@
++# Changed files in v5.3
++
++- .env.example
++- app/application/services/deduplication.py
++- app/application/services/topic_processing.py
++- app/infrastructure/repositories/sent_stories.py
++- app/infrastructure/sources/openrouter_web_search.py
++- app/search_v2/strategy.py
++- app/shared/settings.py
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/MANIFEST_V5_2_BEFORE_V5_3.txt newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_2_BEFORE_V5_3.txt
+--- v52_clean_for_diff/MANIFEST_V5_2_BEFORE_V5_3.txt	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_2_BEFORE_V5_3.txt	2026-04-26 09:39:08.007273947 +0000
+@@ -0,0 +1,120 @@
++.env.example
++ADDED_FILES_V5_2.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_TO_V5_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/MANIFEST_V5_3_AFTER.txt newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_3_AFTER.txt
+--- v52_clean_for_diff/MANIFEST_V5_3_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_3_AFTER.txt	2026-04-26 09:39:07.818762229 +0000
+@@ -0,0 +1,130 @@
++.env.example
++ADDED_FILES_V5_2.md
++ADDED_FILES_V5_3.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++CHANGED_FILES_V5_3.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_2_BEFORE_V5_3.txt
++MANIFEST_V5_3_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_2_TO_V5_3.diff
++PATCH_V5_TO_V5_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++REMOVED_FILES_V5_3.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++START_HERE_V5_3_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++TEST_REPORT_V5_3.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_engine_v53.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/PATCH_V5_2_TO_V5_3.diff newsbot_v5_3_single_run_orchestrator/PATCH_V5_2_TO_V5_3.diff
+--- v52_clean_for_diff/PATCH_V5_2_TO_V5_3.diff	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/PATCH_V5_2_TO_V5_3.diff	2026-04-26 09:39:24.025870847 +0000
+@@ -0,0 +1,318 @@
++diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/.env.example newsbot_v5_3_single_run_orchestrator/.env.example
++--- v52_clean_for_diff/.env.example	2026-04-26 08:55:11.709296414 +0000
+++++ newsbot_v5_3_single_run_orchestrator/.env.example	2026-04-26 09:33:05.613657438 +0000
++@@ -14,12 +14,12 @@
++ OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
++ OPENROUTER_DEFAULT_MODEL=openai/gpt-4.1-mini
++ OPENROUTER_SEARCH_MODEL=
++-OPENROUTER_WEB_SEARCH_MAX_RESULTS=16
+++OPENROUTER_WEB_SEARCH_MAX_RESULTS=15
++ OPENROUTER_TOPIC_BUDGET_USD=0.07
++ OPENROUTER_SEARCH_RESULT_COST_USD=0.004
++-OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=8
++-OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=2
++-OPENROUTER_MIN_QUALITY_CANDIDATES=4
+++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=5
+++OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=3
+++OPENROUTER_MIN_QUALITY_CANDIDATES=3
++ OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
++ OPENROUTER_DEBUG_REJECTIONS=true
++ OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
++@@ -49,4 +49,9 @@
++ OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++ OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_DIRECTNESS=12
++ OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_CONFIDENCE=2
++-OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
+++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=2
+++
+++# v5.3 single-run adaptive search
+++OPENROUTER_ADAPTIVE_TARGET_CANDIDATES=3
+++OPENROUTER_MIN_SEARCH_PASSES=2
+++IMMEDIATE_REPEAT_GUARD_MINUTES=15
++diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/ADDED_FILES_V5_3.md newsbot_v5_3_single_run_orchestrator/ADDED_FILES_V5_3.md
++--- v52_clean_for_diff/ADDED_FILES_V5_3.md	1970-01-01 00:00:00.000000000 +0000
+++++ newsbot_v5_3_single_run_orchestrator/ADDED_FILES_V5_3.md	2026-04-26 09:38:25.824938862 +0000
++@@ -0,0 +1,12 @@
+++# Added files in v5.3
+++
+++- tests/test_quality_engine_v53.py
+++- QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+++- START_HERE_V5_3_RU.md
+++- TEST_REPORT_V5_3.md
+++- PATCH_V5_2_TO_V5_3.diff
+++- MANIFEST_V5_2_BEFORE_V5_3.txt
+++- MANIFEST_V5_3_AFTER.txt
+++- CHANGED_FILES_V5_3.md
+++- ADDED_FILES_V5_3.md
+++- REMOVED_FILES_V5_3.md
++diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/CHANGED_FILES_V5_3.md newsbot_v5_3_single_run_orchestrator/CHANGED_FILES_V5_3.md
++--- v52_clean_for_diff/CHANGED_FILES_V5_3.md	1970-01-01 00:00:00.000000000 +0000
+++++ newsbot_v5_3_single_run_orchestrator/CHANGED_FILES_V5_3.md	2026-04-26 09:38:25.814805978 +0000
++@@ -0,0 +1,9 @@
+++# Changed files in v5.3
+++
+++- .env.example
+++- app/application/services/deduplication.py
+++- app/application/services/topic_processing.py
+++- app/infrastructure/repositories/sent_stories.py
+++- app/infrastructure/sources/openrouter_web_search.py
+++- app/search_v2/strategy.py
+++- app/shared/settings.py
++diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/MANIFEST_V5_2_BEFORE_V5_3.txt newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_2_BEFORE_V5_3.txt
++--- v52_clean_for_diff/MANIFEST_V5_2_BEFORE_V5_3.txt	1970-01-01 00:00:00.000000000 +0000
+++++ newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_2_BEFORE_V5_3.txt	2026-04-26 09:39:08.007273947 +0000
++@@ -0,0 +1,120 @@
+++.env.example
+++ADDED_FILES_V5_2.md
+++CHANGED_FILES.md
+++CHANGED_FILES_V5_1.md
+++CHANGED_FILES_V5_2.md
+++MANIFEST_AFTER.txt
+++MANIFEST_BEFORE.txt
+++MANIFEST_V5_1_AFTER.txt
+++MANIFEST_V5_1_BEFORE_V5_2.txt
+++MANIFEST_V5_2_AFTER.txt
+++MANIFEST_V5_BEFORE_V51.txt
+++PATCH.diff
+++PATCH_V5_1_TO_V5_2.diff
+++PATCH_V5_TO_V5_1.diff
+++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+++QUALITY_ENGINE_V5_2_BALANCE_RU.md
+++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
+++README.md
+++REMOVED_FILES.md
+++REMOVED_FILES_V5_1.md
+++REMOVED_FILES_V5_2.md
+++START_HERE_RU.md
+++START_HERE_V5_2_RU.md
+++TECHNICAL_DECISIONS.md
+++TEST_REPORT.md
+++TEST_REPORT_V5_1.md
+++TEST_REPORT_V5_2.md
+++app/__init__.py
+++app/api/__init__.py
+++app/api/routes/__init__.py
+++app/api/routes/internal.py
+++app/api/routes/telegram.py
+++app/application/__init__.py
+++app/application/services/__init__.py
+++app/application/services/deduplication.py
+++app/application/services/source_collection.py
+++app/application/services/topic_processing.py
+++app/bot/__init__.py
+++app/bot/application.py
+++app/bot/handlers/__init__.py
+++app/bot/handlers/callbacks.py
+++app/bot/handlers/channels.py
+++app/bot/handlers/start.py
+++app/bot/handlers/topic_creation.py
+++app/bot/handlers/topics_list.py
+++app/bot/keyboards/__init__.py
+++app/bot/keyboards/channels.py
+++app/bot/keyboards/main_menu.py
+++app/bot/keyboards/topic_creation.py
+++app/bot/keyboards/topic_details.py
+++app/bot/keyboards/topics_list.py
+++app/domain/__init__.py
+++app/domain/enums.py
+++app/domain/policies/__init__.py
+++app/domain/policies/normalization.py
+++app/domain/policies/ranking.py
+++app/domain/value_objects.py
+++app/infrastructure/__init__.py
+++app/infrastructure/db/__init__.py
+++app/infrastructure/db/base.py
+++app/infrastructure/db/models.py
+++app/infrastructure/db/session.py
+++app/infrastructure/llm/__init__.py
+++app/infrastructure/llm/base.py
+++app/infrastructure/llm/openrouter.py
+++app/infrastructure/providers/__init__.py
+++app/infrastructure/providers/news/__init__.py
+++app/infrastructure/providers/news/base.py
+++app/infrastructure/providers/news/factory.py
+++app/infrastructure/providers/news/mock.py
+++app/infrastructure/repositories/__init__.py
+++app/infrastructure/repositories/channels.py
+++app/infrastructure/repositories/job_runs.py
+++app/infrastructure/repositories/sent_stories.py
+++app/infrastructure/repositories/stories.py
+++app/infrastructure/repositories/topics.py
+++app/infrastructure/repositories/users.py
+++app/infrastructure/scheduler/__init__.py
+++app/infrastructure/scheduler/service.py
+++app/infrastructure/sources/__init__.py
+++app/infrastructure/sources/base.py
+++app/infrastructure/sources/factory.py
+++app/infrastructure/sources/mock.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/infrastructure/sources/registry.py
+++app/infrastructure/sources/rss.py
+++app/infrastructure/sources/telegram_channel.py
+++app/infrastructure/telegram/__init__.py
+++app/infrastructure/telegram/callbacks.py
+++app/infrastructure/telegram/publisher.py
+++app/infrastructure/telegram/service_messages.py
+++app/main.py
+++app/scheduler_runner.py
+++app/schemas/__init__.py
+++app/schemas/articles.py
+++app/schemas/discovery.py
+++app/schemas/llm.py
+++app/schemas/publishing.py
+++app/schemas/sources.py
+++app/schemas/topics.py
+++app/search_v2/__init__.py
+++app/search_v2/article_filter.py
+++app/search_v2/strategy.py
+++app/shared/__init__.py
+++app/shared/logging.py
+++app/shared/settings.py
+++docker-compose.yml
+++docker/app/Dockerfile
+++pyproject.toml
+++tests/conftest.py
+++tests/test_deduplication.py
+++tests/test_disambiguation_diversity.py
+++tests/test_freshness_guard_v51.py
+++tests/test_normalization.py
+++tests/test_quality_engine_v5.py
+++tests/test_quality_engine_v52.py
+++tests/test_quality_filters.py
+++tests/test_ranking.py
+++tests/test_search_v2.py
+++tests/test_source_collection.py
++diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/MANIFEST_V5_3_AFTER.txt newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_3_AFTER.txt
++--- v52_clean_for_diff/MANIFEST_V5_3_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
+++++ newsbot_v5_3_single_run_orchestrator/MANIFEST_V5_3_AFTER.txt	2026-04-26 09:39:07.818762229 +0000
++@@ -0,0 +1,130 @@
+++.env.example
+++ADDED_FILES_V5_2.md
+++ADDED_FILES_V5_3.md
+++CHANGED_FILES.md
+++CHANGED_FILES_V5_1.md
+++CHANGED_FILES_V5_2.md
+++CHANGED_FILES_V5_3.md
+++MANIFEST_AFTER.txt
+++MANIFEST_BEFORE.txt
+++MANIFEST_V5_1_AFTER.txt
+++MANIFEST_V5_1_BEFORE_V5_2.txt
+++MANIFEST_V5_2_AFTER.txt
+++MANIFEST_V5_2_BEFORE_V5_3.txt
+++MANIFEST_V5_3_AFTER.txt
+++MANIFEST_V5_BEFORE_V51.txt
+++PATCH.diff
+++PATCH_V5_1_TO_V5_2.diff
+++PATCH_V5_2_TO_V5_3.diff
+++PATCH_V5_TO_V5_1.diff
+++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+++QUALITY_ENGINE_V5_2_BALANCE_RU.md
+++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
+++README.md
+++REMOVED_FILES.md
+++REMOVED_FILES_V5_1.md
+++REMOVED_FILES_V5_2.md
+++REMOVED_FILES_V5_3.md
+++START_HERE_RU.md
+++START_HERE_V5_2_RU.md
+++START_HERE_V5_3_RU.md
+++TECHNICAL_DECISIONS.md
+++TEST_REPORT.md
+++TEST_REPORT_V5_1.md
+++TEST_REPORT_V5_2.md
+++TEST_REPORT_V5_3.md
+++app/__init__.py
+++app/api/__init__.py
+++app/api/routes/__init__.py
+++app/api/routes/internal.py
+++app/api/routes/telegram.py
+++app/application/__init__.py
+++app/application/services/__init__.py
+++app/application/services/deduplication.py
+++app/application/services/source_collection.py
+++app/application/services/topic_processing.py
+++app/bot/__init__.py
+++app/bot/application.py
+++app/bot/handlers/__init__.py
+++app/bot/handlers/callbacks.py
+++app/bot/handlers/channels.py
+++app/bot/handlers/start.py
+++app/bot/handlers/topic_creation.py
+++app/bot/handlers/topics_list.py
+++app/bot/keyboards/__init__.py
+++app/bot/keyboards/channels.py
+++app/bot/keyboards/main_menu.py
+++app/bot/keyboards/topic_creation.py
+++app/bot/keyboards/topic_details.py
+++app/bot/keyboards/topics_list.py
+++app/domain/__init__.py
+++app/domain/enums.py
+++app/domain/policies/__init__.py
+++app/domain/policies/normalization.py
+++app/domain/policies/ranking.py
+++app/domain/value_objects.py
+++app/infrastructure/__init__.py
+++app/infrastructure/db/__init__.py
+++app/infrastructure/db/base.py
+++app/infrastructure/db/models.py
+++app/infrastructure/db/session.py
+++app/infrastructure/llm/__init__.py
+++app/infrastructure/llm/base.py
+++app/infrastructure/llm/openrouter.py
+++app/infrastructure/providers/__init__.py
+++app/infrastructure/providers/news/__init__.py
+++app/infrastructure/providers/news/base.py
+++app/infrastructure/providers/news/factory.py
+++app/infrastructure/providers/news/mock.py
+++app/infrastructure/repositories/__init__.py
+++app/infrastructure/repositories/channels.py
+++app/infrastructure/repositories/job_runs.py
+++app/infrastructure/repositories/sent_stories.py
+++app/infrastructure/repositories/stories.py
+++app/infrastructure/repositories/topics.py
+++app/infrastructure/repositories/users.py
+++app/infrastructure/scheduler/__init__.py
+++app/infrastructure/scheduler/service.py
+++app/infrastructure/sources/__init__.py
+++app/infrastructure/sources/base.py
+++app/infrastructure/sources/factory.py
+++app/infrastructure/sources/mock.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/infrastructure/sources/registry.py
+++app/infrastructure/sources/rss.py
+++app/infrastructure/sources/telegram_channel.py
+++app/infrastructure/telegram/__init__.py
+++app/infrastructure/telegram/callbacks.py
+++app/infrastructure/telegram/publisher.py
+++app/infrastructure/telegram/service_messages.py
+++app/main.py
+++app/scheduler_runner.py
+++app/schemas/__init__.py
+++app/schemas/articles.py
+++app/schemas/discovery.py
+++app/schemas/llm.py
+++app/schemas/publishing.py
+++app/schemas/sources.py
+++app/schemas/topics.py
+++app/search_v2/__init__.py
+++app/search_v2/article_filter.py
+++app/search_v2/strategy.py
+++app/shared/__init__.py
+++app/shared/logging.py
+++app/shared/settings.py
+++docker-compose.yml
+++docker/app/Dockerfile
+++pyproject.toml
+++tests/conftest.py
+++tests/test_deduplication.py
+++tests/test_disambiguation_diversity.py
+++tests/test_freshness_guard_v51.py
+++tests/test_normalization.py
+++tests/test_quality_engine_v5.py
+++tests/test_quality_engine_v52.py
+++tests/test_quality_engine_v53.py
+++tests/test_quality_filters.py
+++tests/test_ranking.py
+++tests/test_search_v2.py
+++tests/test_source_collection.py
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md newsbot_v5_3_single_run_orchestrator/QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+--- v52_clean_for_diff/QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md	2026-04-26 09:38:49.503674946 +0000
+@@ -0,0 +1,97 @@
++# Quality Engine v5.3 — single-run adaptive search
++
++Цель v5.3: исправить поведение, когда первый запуск темы даёт 0–1 новость, а второй запуск через минуту внезапно находит ещё одну. Теперь один запуск должен сам сделать несколько поисковых проходов в рамках бюджета, собрать общий пул кандидатов, отфильтровать, дедуплицировать и только потом отправлять дайджест.
++
++## Что изменено
++
++### 1. Больше поисковых углов за те же деньги
++
++Было:
++
++```env
++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=8
++OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=2
++```
++
++Стало:
++
++```env
++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=5
++OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=3
++```
++
++При цене `$0.004` за результат это примерно:
++
++```text
++3 × 5 × 0.004 = $0.06
++```
++
++То есть остаёмся ниже потолка `$0.07`, но получаем не два, а три разных query-pass.
++
++### 2. Single-run adaptive orchestration
++
++OpenRouter source теперь логирует и выполняет поисковые проходы как единый сбор кандидатов:
++
++```text
++pass_1: raw / accepted / added
++pass_2: raw / accepted / added
++pass_3: raw / accepted / added
++final merged count
++```
++
++Если после первых проходов кандидатов мало, rescue/snippet fallback включается внутри этого же запуска, а не только после повторного нажатия пользователем.
++
++### 3. Менее “самоцензурный” prompt
++
++Раньше prompt просил OpenRouter не возвращать ссылки без видимой даты. Это могло приводить к нулям, потому что дата часто не видна в search annotation. Теперь OpenRouter отдаёт кандидатов, а локальный слой сам проверяет дату, тип страницы, directness и freshness.
++
++### 4. Детерминированнее web-search запрос
++
++В payload добавлены:
++
++```json
++"temperature": 0,
++"top_p": 0.2
++```
++
++Это должно снизить разброс между первым и вторым запуском.
++
++### 5. Нишевые источники не режутся слишком рано
++
++До v5.3 часть esports/technology/game/entertainment ссылок могла отлетать ещё на этапе извлечения из search annotations из-за нестандартного URL. Теперь ранний фильтр стал мягче, а строгая проверка перенесена в локальный quality gate.
++
++### 6. Better query ordering
++
++Для tech/esports/game-подобных тем второй и третий поисковые проходы теперь получают не просто `breaking news`, а семантические расширения. Например для esports-CS тем в первых проходах появляется `CS2 Counter-Strike`, а для software topics — `software release`, `security`, `developer ecosystem`.
++
++Это не хардкод под одну тему, а общий принцип: короткие/нишевые запросы требуют контекстного расширения.
++
++### 7. Immediate repeat guard
++
++Если пользователь нажимает “Запустить сейчас” повторно сразу после успешного дайджеста, бот больше не должен доставать старые остатки из того же окна. Включён guard:
++
++```env
++IMMEDIATE_REPEAT_GUARD_MINUTES=15
++```
++
++В этот период повторный запуск ищет только реально более новые материалы, а не “второй сорт” из прошлого окна.
++
++### 8. Дедуп спортивных матчей на кириллице
++
++Расширены event terms для украинских/русских match-report заголовков. Это должно лучше склеивать материалы типа “Шахтар победил Зорю” и “Шахтар дотиснув Зорю...” в один сюжет.
++
++## Что не менялось
++
++- Старые новости всё ещё не должны проходить как fresh.
++- Verified publish date остаётся главным сигналом.
++- Search-snippet fallback остаётся ограниченным и штрафуется.
++- Бюджетный потолок `$0.07` сохранён.
++- Рабочие файлы не удалялись.
++
++## Что смотреть в тестах у себя
++
++1. Первый запуск должен чаще сразу давать полный доступный дайджест, а не требовать второго клика.
++2. Повторный запуск через минуту после успешного дайджеста должен чаще отвечать “новых нет”, а не слать слабые остатки.
++3. Темы вроде `python`, `BLAST CS`, `world of tanks` должны реже уходить в 0 из-за раннего URL-фильтра.
++4. Старые статьи всё ещё не должны пролезать.
++5. News hub pages всё ещё должны резаться.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/REMOVED_FILES_V5_3.md newsbot_v5_3_single_run_orchestrator/REMOVED_FILES_V5_3.md
+--- v52_clean_for_diff/REMOVED_FILES_V5_3.md	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/REMOVED_FILES_V5_3.md	2026-04-26 09:38:25.835234796 +0000
+@@ -0,0 +1,3 @@
++# Removed files in v5.3
++
++No working files removed.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/START_HERE_V5_3_RU.md newsbot_v5_3_single_run_orchestrator/START_HERE_V5_3_RU.md
+--- v52_clean_for_diff/START_HERE_V5_3_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/START_HERE_V5_3_RU.md	2026-04-26 09:38:49.603779279 +0000
+@@ -0,0 +1,61 @@
++# START HERE — v5.3
++
++## 1. Обнови `.env`
++
++Если у тебя уже есть старый `.env`, новые значения из `.env.example` сами не подтянутся. Проверь вручную:
++
++```env
++OPENROUTER_WEB_SEARCH_MAX_RESULTS=15
++OPENROUTER_TOPIC_BUDGET_USD=0.07
++OPENROUTER_SEARCH_RESULT_COST_USD=0.004
++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=5
++OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=3
++OPENROUTER_MIN_QUALITY_CANDIDATES=3
++OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
++OPENROUTER_DEBUG_REJECTIONS=true
++OPENROUTER_MAX_ARTICLE_AGE_HOURS=168
++OPENROUTER_REQUIRE_VERIFIED_PUBLISH_DATE=true
++OPENROUTER_ALLOW_WEAK_PUBLISH_DATES=false
++OPENROUTER_ALLOW_UNDATED_FALLBACK=false
++OPENROUTER_FUTURE_SKEW_HOURS=12
++OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_DIRECTNESS=12
++OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_CONFIDENCE=2
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=2
++OPENROUTER_ADAPTIVE_TARGET_CANDIDATES=3
++OPENROUTER_MIN_SEARCH_PASSES=2
++IMMEDIATE_REPEAT_GUARD_MINUTES=15
++```
++
++## 2. Запусти тесты
++
++```bash
++pytest -q
++```
++
++## 3. Как тестировать руками
++
++Проверяй не только “нашёл / не нашёл”, а поведение:
++
++```text
++- первый запуск темы;
++- повторный запуск через 1 минуту;
++- повторный запуск через 15+ минут;
++- свежесть статей;
++- не повторяется ли один и тот же сюжет;
++- не пролезают ли category/news hub pages.
++```
++
++## 4. Что прислать, если результат странный
++
++Лучше всего прислать:
++
++```text
++- тему;
++- первый результат;
++- второй результат;
++- время между запусками;
++- строки логов source_fetch_plan / source_fetch_pass / candidate_rejected / source_fetch_success.
++```
++
++Особенно важны новые логи `source_fetch_pass`: по ним будет видно, где именно теряются кандидаты.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/TEST_REPORT_V5_3.md newsbot_v5_3_single_run_orchestrator/TEST_REPORT_V5_3.md
+--- v52_clean_for_diff/TEST_REPORT_V5_3.md	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/TEST_REPORT_V5_3.md	2026-04-26 09:38:49.620247298 +0000
+@@ -0,0 +1,30 @@
++# Test report v5.3
++
++Проверено в локальной среде ChatGPT container / Python runtime.
++
++## Syntax
++
++```text
++python -m compileall -q app tests
++PASS
++```
++
++## Pytest
++
++```text
++pytest -q
++38 passed
++```
++
++Были warning-и pytest cache из-за прав на `/mnt/data`, но тесты прошли.
++
++## Targeted tests
++
++```text
++pytest -q tests/test_quality_engine_v53.py tests/test_quality_engine_v52.py tests/test_freshness_guard_v51.py
++13 passed
++```
++
++## Live OpenRouter / Telegram
++
++Не прогонялось, потому что в этой среде нет твоих реальных ключей и Telegram окружения.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/app/application/services/deduplication.py newsbot_v5_3_single_run_orchestrator/app/application/services/deduplication.py
+--- v52_clean_for_diff/app/application/services/deduplication.py	2026-04-26 08:55:44.135228293 +0000
++++ newsbot_v5_3_single_run_orchestrator/app/application/services/deduplication.py	2026-04-26 09:32:27.443325862 +0000
+@@ -34,7 +34,7 @@
+ _MODEL_HINTS = {"bmw","series","i7","7","facelift","neue","klasse","cs2","patch","update","ukraine","war","usa","us","apple","iphone","ipad","mac"}
+ _EVENT_TERMS = {
+     "match", "game", "beat", "beats", "defeat", "defeats", "win", "wins", "victory", "penalty", "league", "round",
+-    "матч", "матчі", "переміг", "перемога", "пенальті", "ліга", "лізі", "тур", "чемпіонат",
++    "матч", "матчі", "матчу", "переміг", "перемога", "переможе", "пенальті", "ліга", "лізі", "прем", "премєр", "прем'єр", "тур", "чемпіонат", "чемпіонату", "дотиснув", "лідерство",
+     "partido", "victoria", "derrota", "penalti", "penalty", "liga",
+ }
+ 
+@@ -69,9 +69,16 @@
+ 
+ def _looks_like_same_event(sig_a: set[str], sig_b: set[str]) -> bool:
+     shared = sig_a & sig_b
+-    if len(shared) >= 3 and (sig_a & _EVENT_TERMS or sig_b & _EVENT_TERMS):
++    event_a = sig_a & _EVENT_TERMS
++    event_b = sig_b & _EVENT_TERMS
++    if len(shared) >= 3 and (event_a or event_b):
+         return True
+-    if len(shared) >= 2 and (sig_a & _EVENT_TERMS) and (sig_b & _EVENT_TERMS):
++    if len(shared) >= 2 and event_a and event_b:
++        return True
++    # Match-report headlines in Ukrainian/Russian/Spanish often describe the same
++    # game with different verbs. If two specific team/entity tokens overlap and at
++    # least one title clearly looks like a match report, treat them as one story.
++    if len(shared) >= 2 and (event_a or event_b) and any(len(token) >= 5 for token in shared):
+         return True
+     return False
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/app/application/services/topic_processing.py newsbot_v5_3_single_run_orchestrator/app/application/services/topic_processing.py
+--- v52_clean_for_diff/app/application/services/topic_processing.py	2026-04-26 08:55:19.373722927 +0000
++++ newsbot_v5_3_single_run_orchestrator/app/application/services/topic_processing.py	2026-04-26 09:33:16.038991346 +0000
+@@ -71,10 +71,25 @@
+ 
+         window_to = datetime.now(tz=timezone.utc)
+         has_history = await self._sent_story_repository.has_any_for_topic(topic_id=topic_id)
++        last_sent_at = await self._sent_story_repository.get_last_sent_at(topic_id=topic_id)
+         recent_sent_count = await self._sent_story_repository.get_recent_sent_count(topic_id=topic_id, hours=72)
++        if last_sent_at is not None and last_sent_at.tzinfo is None:
++            last_sent_at = last_sent_at.replace(tzinfo=timezone.utc)
++        if last_sent_at is not None:
++            last_sent_at = last_sent_at.astimezone(timezone.utc)
+         thin_recent_history = has_history and recent_sent_count < min(3, settings.max_stories_per_post)
++        immediate_repeat = (
++            last_sent_at is not None
++            and (window_to - last_sent_at) <= timedelta(minutes=settings.immediate_repeat_guard_minutes)
++        )
+         if window_override_hours is not None:
+             window_from = window_to - timedelta(hours=window_override_hours)
++        elif immediate_repeat:
++            # A second button press right after a digest should only find truly newer items,
++            # not weaker leftovers from the same retrieval window.
++            window_from = max(last_sent_at, window_to - timedelta(hours=2))
++        elif force and thin_recent_history:
++            window_from = window_to - timedelta(hours=72)
+         elif force:
+             window_from = window_to - timedelta(days=7)
+         elif thin_recent_history:
+@@ -101,6 +116,8 @@
+             force=force,
+             recent_sent_count=recent_sent_count,
+             thin_recent_history=thin_recent_history,
++            immediate_repeat=immediate_repeat,
++            last_sent_at=last_sent_at.isoformat() if last_sent_at else None,
+         )
+ 
+         try:
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/app/infrastructure/repositories/sent_stories.py newsbot_v5_3_single_run_orchestrator/app/infrastructure/repositories/sent_stories.py
+--- v52_clean_for_diff/app/infrastructure/repositories/sent_stories.py	2026-04-25 18:07:22.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/app/infrastructure/repositories/sent_stories.py	2026-04-26 09:33:05.614255544 +0000
+@@ -36,6 +36,12 @@
+ 
+ 
+ 
++    async def get_last_sent_at(self, *, topic_id: int) -> datetime | None:
++        result = await self._session.execute(
++            select(func.max(SentStory.sent_at)).where(SentStory.topic_id == topic_id)
++        )
++        return result.scalar_one_or_none()
++
+     async def get_recent_sent_count(self, *, topic_id: int, hours: int = 72) -> int:
+         threshold = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+         result = await self._session.execute(
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/app/infrastructure/sources/openrouter_web_search.py newsbot_v5_3_single_run_orchestrator/app/infrastructure/sources/openrouter_web_search.py
+--- v52_clean_for_diff/app/infrastructure/sources/openrouter_web_search.py	2026-04-26 08:55:02.708067531 +0000
++++ newsbot_v5_3_single_run_orchestrator/app/infrastructure/sources/openrouter_web_search.py	2026-04-26 09:35:42.703864245 +0000
+@@ -92,6 +92,8 @@
+         self._allow_search_snippet_fallback = settings.openrouter_allow_search_snippet_fallback
+         self._search_snippet_fallback_min_directness = max(settings.openrouter_search_snippet_fallback_min_directness, 1)
+         self._search_snippet_fallback_min_confidence = max(settings.openrouter_search_snippet_fallback_min_confidence, 0)
++        self._adaptive_target_candidates = max(settings.openrouter_adaptive_target_candidates, 1)
++        self._min_search_passes = max(settings.openrouter_min_search_passes, 1)
+ 
+     async def fetch(
+         self,
+@@ -122,15 +124,41 @@
+             query_variants=queries,
+         )
+ 
+-        for current_query in queries:
++        adaptive_target = min(target_limit, max(self._min_quality_candidates, self._adaptive_target_candidates))
++        min_passes = min(max_calls, self._min_search_passes)
++        pass_stats: list[dict[str, Any]] = []
++
++        for pass_index, current_query in enumerate(queries, start=1):
+             payload = await self._call_server_tool(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call, broad_topic=plan.broad_topic)
+             raw_items = self._extract_items_from_payload(payload, results_per_call)
+             self._append_unique_raw(rescue_pool, rescue_seen, raw_items)
+             items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=False)
++            before_count = len(merged)
+             self._merge_unique(merged, seen_urls, items, target_limit)
++            pass_stats.append({
++                "pass": pass_index,
++                "query": current_query,
++                "raw": len(raw_items),
++                "accepted": len(items),
++                "merged_after_pass": len(merged),
++            })
++            logger.info(
++                "source_fetch_pass",
++                source=self.name,
++                pass_index=pass_index,
++                raw_count=len(raw_items),
++                accepted_count=len(items),
++                added_count=len(merged) - before_count,
++                merged_count=len(merged),
++                adaptive_target=adaptive_target,
++                query=current_query,
++            )
++            # Do not make the user press the button twice: keep going until we have
++            # a usable candidate pool, but stop early when the pool is already good.
++            if pass_index >= min_passes and len(merged) >= adaptive_target:
++                break
+             if len(merged) >= target_limit:
+-                logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+-                return merged
++                break
+ 
+         if len(merged) < min(self._min_quality_candidates, target_limit) and rescue_pool and self._allow_search_snippet_fallback:
+             rescue_items = await self._enrich_and_filter_recent(
+@@ -143,7 +171,7 @@
+             self._merge_unique(merged, seen_urls, rescue_items, target_limit)
+ 
+         if merged:
+-            logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
++            logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged), pass_stats=pass_stats)
+             return merged
+ 
+         if self._allow_plugin_fallback:
+@@ -216,10 +244,10 @@
+                 {
+                     "role": "system",
+                     "content": (
+-                        "You are a news discovery assistant. Search the web for genuinely recent news articles on the given topic. "
+-                        "Prefer authoritative journalism and recent reporting with a visible publication date. Do not return old archive articles, "
+-                        "evergreen pages, stale explainers, or pages whose publication date is outside the requested window. If multiple languages "
+-                        "cover the same story, prefer English then German. In your answer, keep it short and cite each result."
++                        "You are a news discovery assistant. Search the web for genuinely recent news article candidates on the given topic. "
++                        "Prefer authoritative journalism and recent reporting with a visible publication date. Avoid old archive articles, "
++                        "evergreen pages, stale explainers, homepages, category pages and generic news hubs. If multiple languages "
++                        "cover the same story, prefer English then German. Return candidates; local validation will verify publication dates."
+                     ),
+                 },
+                 {
+@@ -228,12 +256,14 @@
+                         f"Topic: {query}\n"
+                         f"Time window start: {from_dt.isoformat()}\n"
+                         f"Time window end: {to_dt.isoformat()}\n"
+-                        f"Return up to {limit} news article links published within this exact window only. "
+-                        "If the publication date is missing or probably older than the start time, omit the result. "
+-                        "Use short one-line reasons. Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, and generic news-hub pages."
++                        f"Return up to {limit} specific news article links that appear to be published inside this window. "
++                        "Include the URL even if the date is not visible in the search result, but prefer candidates with visible dates. "
++                        "Use short one-line reasons and do not include homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, or generic news-hub pages."
+                     ),
+                 },
+             ],
++            "temperature": 0,
++            "top_p": 0.2,
+             "tools": [
+                 {
+                     "type": "openrouter:web_search",
+@@ -261,8 +291,8 @@
+                 {
+                     "role": "system",
+                     "content": (
+-                        "You are a news discovery assistant. Find genuinely recent news article links for the given topic. "
+-                        "Prefer authoritative sources with visible publication dates and cite each result. Only return hard-news article URLs published inside the requested time window."
++                        "You are a news discovery assistant. Find genuinely recent news article candidates for the given topic. "
++                        "Prefer authoritative sources with visible publication dates and cite each result. Avoid generic hubs and old archive pages."
+                     ),
+                 },
+                 {
+@@ -271,12 +301,14 @@
+                         f"Topic: {query}\n"
+                         f"Time window start: {from_dt.isoformat()}\n"
+                         f"Time window end: {to_dt.isoformat()}\n"
+-                        f"Return up to {limit} news article links published within this exact window only. "
+-                        "If the publication date is missing or probably older than the start time, omit the result. "
++                        f"Return up to {limit} specific news article links that appear to be published inside this window. "
++                        "Include the URL even if the date is not visible in the search result, but prefer candidates with visible dates. "
+                         "Avoid homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, stock-analysis pages, and generic news-hub pages."
+                     ),
+                 },
+             ],
++            "temperature": 0,
++            "top_p": 0.2,
+             "plugins": [{"id": "web", "max_results": limit}],
+         }
+         return await self._post_chat_completions(body)
+@@ -311,11 +343,9 @@
+                 continue
+             seen_urls.add(raw_url)
+             title = (citation.get("title") or self._title_from_url(raw_url)).strip()
+-            if not self._looks_like_news_article(raw_url, title):
++            if not self._looks_like_basic_link_candidate(raw_url, title):
+                 continue
+             snippet = (citation.get("content") or "").strip() or None
+-            if not self._looks_like_news_article(raw_url, None):
+-                continue
+             source_name = urlparse(raw_url).netloc.replace("www.", "")
+             items.append(
+                 RawSourceItem(
+@@ -436,7 +466,7 @@
+                     published_at = published_at.replace(tzinfo=timezone.utc)
+                 published_at = published_at.astimezone(timezone.utc)
+ 
+-                if published_at < freshness_floor:
++                if self._is_before_freshness_floor(published_at, freshness_floor, published_source):
+                     self._log_rejection(
+                         plan,
+                         canonical_url,
+@@ -457,7 +487,7 @@
+ 
+                 source_language = item.source_language or meta.language or self._extract_language(response.text)
+                 parsed_url = self._safe_http_url(canonical_url)
+-                if parsed_url is None or not self._looks_like_news_article(canonical_url, candidate_title):
++                if parsed_url is None or not self._looks_like_news_article(canonical_url, candidate_title, plan=plan):
+                     self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "url_does_not_look_like_news_article")
+                     continue
+                 if article_confidence(canonical_url, candidate_title, candidate_desc) < 1:
+@@ -503,7 +533,7 @@
+         url = str(item.url) if item.url is not None else None
+         if not url:
+             return None
+-        if not self._looks_like_news_article(url, item.title):
++        if not self._looks_like_news_article(url, item.title, plan=plan):
+             self._log_rejection(plan, url, item.title, item.description, f"fallback_not_article:{reason}")
+             return None
+ 
+@@ -537,7 +567,7 @@
+         published_at = published_at.astimezone(timezone.utc)
+         freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+         future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
+-        if published_at < freshness_floor:
++        if self._is_before_freshness_floor(published_at, freshness_floor, published_source):
+             self._log_rejection(plan, url, item.title, item.description, f"fallback_outside_freshness_window:{published_source}:{published_at.isoformat()}")
+             return None
+         if published_at > future_ceiling:
+@@ -567,6 +597,16 @@
+             },
+         })
+ 
++
++    @staticmethod
++    def _is_before_freshness_floor(published_at: datetime, freshness_floor: datetime, published_source: str | None) -> bool:
++        # Dates extracted from URLs usually have day precision only. Treat the whole
++        # calendar day as inside the window, otherwise a URL like /2026/04/26/...
++        # is wrongly rejected at 12:00 on 2026-04-26.
++        if published_source == "url" and published_at.date() == freshness_floor.date():
++            return False
++        return published_at < freshness_floor
++
+     def _freshness_floor(self, *, from_dt: datetime, to_dt: datetime, plan) -> datetime:
+         floor = from_dt
+         max_age_floor = to_dt - timedelta(hours=self._max_article_age_hours)
+@@ -706,7 +746,7 @@
+             return None
+ 
+     @staticmethod
+-    def _looks_like_news_article(raw_url: str, title: str | None) -> bool:
++    def _looks_like_basic_link_candidate(raw_url: str, title: str | None) -> bool:
+         parsed = urlparse(raw_url)
+         host = parsed.netloc.lower().replace("www.", "")
+         path = parsed.path.lower()
+@@ -718,19 +758,40 @@
+             return False
+         if _looks_like_news_hub_title(title, path):
+             return False
++        if any(marker in path for marker in (
++            '/video/', '/videos/', '/watch/', '/watch?', '/podcast', '/audio/',
++            '/gallery/', '/galleries/', '/photos/', '/opinion/', '/tag/', '/tags/',
++            '/topic/', '/topics/', '/category/', '/categories/', '/archive', '/archives',
++            '/all', '/latest'
++        )):
++            return False
++        return True
++
++    @staticmethod
++    def _looks_like_news_article(raw_url: str, title: str | None, *, plan=None) -> bool:
++        parsed = urlparse(raw_url)
++        host = parsed.netloc.lower().replace("www.", "")
++        path = parsed.path.lower()
++        title_norm = (title or "").lower()
++
++        if not OpenRouterWebSearchSource._looks_like_basic_link_candidate(raw_url, title):
++            return False
+         if ('latest news' in title_norm or 'news today' in title_norm or 'headlines' in title_norm) and path.rstrip('/') in {'/news','/latest','/latest-news','/world','/business','/politics','/markets','/sport','/sports'}:
+             return False
+         if host.endswith('.org') and not any(marker in path for marker in ('/news', '/article', '/articles', '/stories', '/story', '/press', '/press-release')):
+             return False
+-        if any(marker in path for marker in ('/video/', '/videos/', '/watch/', '/watch?', '/podcast', '/audio/', '/gallery/', '/galleries/', '/photos/', '/opinion/', '/tag/', '/tags/', '/topic/', '/topics/', '/category/', '/categories/', '/archive', '/archives', '/all', '/latest')):
+-            return False
+         if len(path.rstrip('/').split('/')) < 2 and not any(h in path for h in _NEWS_PATH_HINTS):
+             return False
+         if not any(h in path for h in _NEWS_PATH_HINTS) and not re.search(r'/20\d{2}/', path):
+-            # allow only well-known hard-news hosts even when path is terse
+             trusted = ('reuters', 'apnews', 'bbc', 'dw', 'ft.com', 'wsj', 'nytimes', 'theguardian', 'sky', 'bloomberg')
+-            if not any(t in host for t in trusted):
+-                return False
++            if any(t in host for t in trusted):
++                return True
++            # Niche tech/esports/game/entertainment sites often do not use /news/YYYY URL shapes.
++            # Let the topical quality gate decide when the title is direct enough.
++            if plan is not None and getattr(plan, "topic_kind", "") in {"technology", "esports", "game_updates", "entertainment", "team_org"}:
++                if title_norm and len(re.findall(r"[a-zA-Z0-9а-яА-ЯёЁіІїЇєЄґҐ]+", title_norm)) >= 4:
++                    return True
++            return False
+         return True
+ 
+     @staticmethod
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/app/search_v2/strategy.py newsbot_v5_3_single_run_orchestrator/app/search_v2/strategy.py
+--- v52_clean_for_diff/app/search_v2/strategy.py	2026-04-26 08:53:28.448832398 +0000
++++ newsbot_v5_3_single_run_orchestrator/app/search_v2/strategy.py	2026-04-26 09:32:36.609004659 +0000
+@@ -286,7 +286,21 @@
+ 
+     variants: list[str] = []
+     quoted = f'"{q}"' if exact_phrase else q
+-    variants.extend([f'{quoted} latest news {freshness}', f'{quoted} breaking news {freshness}'])
++    variants.append(f'{quoted} latest news {freshness}')
++    # Keep the second/third paid search pass useful. Generic "breaking news" is often
++    # too narrow for tech, esports and niche topics, so those kinds get a semantic
++    # expansion before the generic fallback.
++    if kind == "esports":
++        variants.append(f'{quoted} esports tournament roster latest {freshness}')
++        if re.search(r"\bcs\b", q) or "counter" in q or "strike" in q:
++            variants.append(f'{quoted} CS2 Counter-Strike tournament latest {freshness}')
++    elif kind == "technology":
++        variants.append(f'{quoted} software release security latest {freshness}')
++        variants.append(f'{quoted} developer ecosystem package latest {freshness}')
++    elif kind == "game_updates":
++        variants.append(f'{quoted} official update patch notes {freshness}')
++    else:
++        variants.append(f'{quoted} breaking news {freshness}')
+ 
+     if kind == "game_updates":
+         variants.extend([f'{quoted} official update {freshness}', f'{quoted} patch notes {freshness}', f'{quoted} changelog {freshness}'])
+@@ -353,7 +367,7 @@
+             seen.add(k)
+             deduped.append(v)
+ 
+-    max_variants = 4 if kind in {"game_updates", "sports", "esports", "team_org"} else 6 if broad else 5
++    max_variants = 6 if kind in {"game_updates", "sports", "esports", "team_org", "technology"} else 6 if broad else 5
+     return SearchPlan(
+         raw_query=query,
+         normalized_query=q,
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/app/shared/settings.py newsbot_v5_3_single_run_orchestrator/app/shared/settings.py
+--- v52_clean_for_diff/app/shared/settings.py	2026-04-26 08:55:11.627375019 +0000
++++ newsbot_v5_3_single_run_orchestrator/app/shared/settings.py	2026-04-26 09:33:05.613094141 +0000
+@@ -21,12 +21,12 @@
+     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+     openrouter_default_model: str = "openai/gpt-4.1-mini"
+     openrouter_search_model: str | None = None
+-    openrouter_web_search_max_results: int = 16
++    openrouter_web_search_max_results: int = 15
+     openrouter_topic_budget_usd: float = 0.07
+     openrouter_search_result_cost_usd: float = 0.004
+-    openrouter_web_search_results_per_call: int = 8
+-    openrouter_web_search_max_calls_per_topic: int = 2
+-    openrouter_min_quality_candidates: int = 4
++    openrouter_web_search_results_per_call: int = 5
++    openrouter_web_search_max_calls_per_topic: int = 3
++    openrouter_min_quality_candidates: int = 3
+     openrouter_allow_plugin_fallback: bool = False
+     openrouter_debug_rejections: bool = True
+     openrouter_max_article_age_hours: int = 168
+@@ -39,7 +39,12 @@
+     openrouter_allow_search_snippet_fallback: bool = True
+     openrouter_search_snippet_fallback_min_directness: int = 12
+     openrouter_search_snippet_fallback_min_confidence: int = 2
+-    openrouter_max_weak_freshness_items_per_digest: int = 1
++    openrouter_max_weak_freshness_items_per_digest: int = 2
++    # v5.3: one run should perform enough adaptive search passes before giving up.
++    openrouter_adaptive_target_candidates: int = 3
++    openrouter_min_search_passes: int = 2
++    # If the user presses "run now" again right after a digest, do not drain stale leftovers.
++    immediate_repeat_guard_minutes: int = 15
+ 
+     enable_openrouter_web_search_source: bool = True
+     enable_mock_source: bool = False
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' '--exclude=*.pyc' v52_clean_for_diff/tests/test_quality_engine_v53.py newsbot_v5_3_single_run_orchestrator/tests/test_quality_engine_v53.py
+--- v52_clean_for_diff/tests/test_quality_engine_v53.py	1970-01-01 00:00:00.000000000 +0000
++++ newsbot_v5_3_single_run_orchestrator/tests/test_quality_engine_v53.py	2026-04-26 09:33:37.426953190 +0000
+@@ -0,0 +1,77 @@
++from __future__ import annotations
++
++from datetime import datetime, timedelta, timezone
++
++from app.application.services.deduplication import group_into_stories, normalize_articles
++from app.infrastructure.sources.openrouter_web_search import OpenRouterWebSearchSource
++from app.schemas.articles import RawArticle
++from app.search_v2.strategy import build_search_plan
++
++
++def test_budget_prefers_three_smaller_search_passes_under_seven_cents() -> None:
++    source = object.__new__(OpenRouterWebSearchSource)
++    source._search_result_cost_usd = 0.004
++    source._topic_budget_usd = 0.07
++    source._max_calls_per_topic = 3
++
++    assert source._allowed_search_calls(results_per_call=5) == 3
++
++
++def test_esports_counter_strike_expansion_is_in_first_three_passes() -> None:
++    to_dt = datetime(2026, 4, 26, 12, tzinfo=timezone.utc)
++    plan = build_search_plan("BLAST CS", from_dt=to_dt - timedelta(days=7), to_dt=to_dt, first_run=True)
++
++    first_three = " ".join(plan.query_variants[:3]).lower()
++    assert plan.topic_kind == "esports"
++    assert "counter-strike" in first_three or "cs2" in first_three
++
++
++def test_payload_extraction_keeps_niche_article_candidate_before_local_validation() -> None:
++    source = object.__new__(OpenRouterWebSearchSource)
++    payload = {
++        "choices": [
++            {
++                "message": {
++                    "annotations": [
++                        {
++                            "url_citation": {
++                                "url": "https://example-esports.com/events/blast-cs-roster-update",
++                                "title": "BLAST CS announces new Counter-Strike tournament format",
++                                "content": "BLAST CS confirmed a Counter-Strike tournament update this week.",
++                            }
++                        }
++                    ]
++                }
++            }
++        ]
++    }
++
++    items = source._extract_items_from_payload(payload, limit=5)
++    assert len(items) == 1
++    assert "Counter-Strike" in items[0].title
++
++
++def test_cyrillic_match_reports_with_different_verbs_still_dedup() -> None:
++    now = datetime(2026, 4, 26, tzinfo=timezone.utc)
++    articles = [
++        RawArticle(
++            provider="a",
++            url="https://a.example/2026/04/23/shakhtar-zorya-penalty",
++            title="Чемпіонат України. Шахтар завдяки пенальті переміг Зорю",
++            description="Шахтар переміг Зорю у перенесеному матчі чемпіонату України.",
++            source_name="a.example",
++            source_language="uk",
++            published_at=now,
++        ),
++        RawArticle(
++            provider="b",
++            url="https://b.example/2026/04/23/shakhtar-zorya-premier-league",
++            title="Шахтар дотиснув Зорю і зміцнив своє лідерство в Прем'єр-лізі",
++            description="Шахтар переміг завдяки пенальті у матчі проти Зорі.",
++            source_name="b.example",
++            source_language="uk",
++            published_at=now,
++        ),
++    ]
++
++    assert len(group_into_stories(normalize_articles(articles))) == 1

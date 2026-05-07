@@ -1,0 +1,1557 @@
+diff -ruN base/newsbot_v5_4_retrieval_reliability/.env.example work/newsbot_v6_universal_search_core/.env.example
+--- base/newsbot_v5_4_retrieval_reliability/.env.example	2026-04-26 09:33:05.000000000 +0000
++++ work/newsbot_v6_universal_search_core/.env.example	2026-04-26 13:38:45.080863742 +0000
+@@ -55,3 +55,7 @@
+ OPENROUTER_ADAPTIVE_TARGET_CANDIDATES=3
+ OPENROUTER_MIN_SEARCH_PASSES=2
+ IMMEDIATE_REPEAT_GUARD_MINUTES=15
++
++# v6 universal search core
++OPENROUTER_VERIFIED_HARD_MAX_ARTICLE_AGE_HOURS=720
++OPENROUTER_FOLLOWUP_HARD_MAX_ARTICLE_AGE_HOURS=72
+diff -ruN base/newsbot_v5_4_retrieval_reliability/ADDED_FILES_V6.md work/newsbot_v6_universal_search_core/ADDED_FILES_V6.md
+--- base/newsbot_v5_4_retrieval_reliability/ADDED_FILES_V6.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/ADDED_FILES_V6.md	2026-04-26 13:44:56.420052075 +0000
+@@ -0,0 +1,7 @@
++# Added files in v6
++
++- DEBUG_GUIDE_V6_RU.md
++- QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++- START_HERE_V6_RU.md
++- app/search_v2/core.py
++- tests/test_quality_engine_v6.py
+diff -ruN base/newsbot_v5_4_retrieval_reliability/CHANGED_FILES_V6.md work/newsbot_v6_universal_search_core/CHANGED_FILES_V6.md
+--- base/newsbot_v5_4_retrieval_reliability/CHANGED_FILES_V6.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/CHANGED_FILES_V6.md	2026-04-26 13:44:56.605008291 +0000
+@@ -0,0 +1,8 @@
++# Changed files in v6
++
++- .env.example
++- app/infrastructure/sources/openrouter_web_search.py
++- app/search_v2/__init__.py
++- app/search_v2/article_filter.py
++- app/search_v2/strategy.py
++- app/shared/settings.py
+diff -ruN base/newsbot_v5_4_retrieval_reliability/DEBUG_GUIDE_V6_RU.md work/newsbot_v6_universal_search_core/DEBUG_GUIDE_V6_RU.md
+--- base/newsbot_v5_4_retrieval_reliability/DEBUG_GUIDE_V6_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/DEBUG_GUIDE_V6_RU.md	2026-04-26 13:41:59.109323042 +0000
+@@ -0,0 +1,13 @@
++# Debug Guide v6
++
++Если бот пишет `найдено 0`, теперь нужно смотреть не только `source_fetch_empty`, но и `candidate_decision`.
++
++Примеры интерпретации:
++
++- `raw_count > 0`, но `accepted_count=0`: поиск нашёл ссылки, фильтры отбраковали их.
++- `candidate_decision status=old`: статья слишком старая, это ожидаемый reject.
++- `candidate_decision status=weak_but_usable`: статья без verified date, но OpenRouter snippet достаточно прямой.
++- `candidate_decision reason=topic_news_hub_page`: это страница-раздел, не статья.
++- `candidate_decision reason=wrong_entity_context`: совпала не та сущность.
++
++Для следующего ревью кидай `search_debug_only.txt`, а не скриншоты.
+diff -ruN base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_AFTER.txt work/newsbot_v6_universal_search_core/MANIFEST_V6_AFTER.txt
+--- base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/MANIFEST_V6_AFTER.txt	2026-04-26 13:47:54.830399157 +0000
+@@ -0,0 +1,152 @@
++.env.example
++ADDED_FILES_V5_2.md
++ADDED_FILES_V5_3.md
++ADDED_FILES_V5_4.md
++ADDED_FILES_V6.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++CHANGED_FILES_V5_3.md
++CHANGED_FILES_V5_4.md
++CHANGED_FILES_V6.md
++DEBUG_GUIDE_V6_RU.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_2_BEFORE_V5_3.txt
++MANIFEST_V5_3_AFTER.txt
++MANIFEST_V5_3_BEFORE_V5_4.txt
++MANIFEST_V5_4_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++MANIFEST_V6_AFTER.txt
++MANIFEST_V6_BEFORE.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_2_TO_V5_3.diff
++PATCH_V5_3_TO_V5_4.diff
++PATCH_V5_4_TO_V6.diff
++PATCH_V5_TO_V5_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++REMOVED_FILES_V5_3.md
++REMOVED_FILES_V5_4.md
++REMOVED_FILES_V6.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++START_HERE_V5_3_RU.md
++START_HERE_V5_4_RU.md
++START_HERE_V6_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++TEST_REPORT_V5_3.md
++TEST_REPORT_V5_4.md
++TEST_REPORT_V6.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/core.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_engine_v53.py
++tests/test_quality_engine_v54.py
++tests/test_quality_engine_v6.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff -ruN base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_BEFORE.txt work/newsbot_v6_universal_search_core/MANIFEST_V6_BEFORE.txt
+--- base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_BEFORE.txt	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/MANIFEST_V6_BEFORE.txt	2026-04-26 13:47:54.917279833 +0000
+@@ -0,0 +1,140 @@
++.env.example
++ADDED_FILES_V5_2.md
++ADDED_FILES_V5_3.md
++ADDED_FILES_V5_4.md
++CHANGED_FILES.md
++CHANGED_FILES_V5_1.md
++CHANGED_FILES_V5_2.md
++CHANGED_FILES_V5_3.md
++CHANGED_FILES_V5_4.md
++MANIFEST_AFTER.txt
++MANIFEST_BEFORE.txt
++MANIFEST_V5_1_AFTER.txt
++MANIFEST_V5_1_BEFORE_V5_2.txt
++MANIFEST_V5_2_AFTER.txt
++MANIFEST_V5_2_BEFORE_V5_3.txt
++MANIFEST_V5_3_AFTER.txt
++MANIFEST_V5_3_BEFORE_V5_4.txt
++MANIFEST_V5_4_AFTER.txt
++MANIFEST_V5_BEFORE_V51.txt
++PATCH.diff
++PATCH_V5_1_TO_V5_2.diff
++PATCH_V5_2_TO_V5_3.diff
++PATCH_V5_3_TO_V5_4.diff
++PATCH_V5_TO_V5_1.diff
++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
++QUALITY_ENGINE_V5_2_BALANCE_RU.md
++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
++README.md
++REMOVED_FILES.md
++REMOVED_FILES_V5_1.md
++REMOVED_FILES_V5_2.md
++REMOVED_FILES_V5_3.md
++REMOVED_FILES_V5_4.md
++START_HERE_RU.md
++START_HERE_V5_2_RU.md
++START_HERE_V5_3_RU.md
++START_HERE_V5_4_RU.md
++TECHNICAL_DECISIONS.md
++TEST_REPORT.md
++TEST_REPORT_V5_1.md
++TEST_REPORT_V5_2.md
++TEST_REPORT_V5_3.md
++TEST_REPORT_V5_4.md
++app/__init__.py
++app/api/__init__.py
++app/api/routes/__init__.py
++app/api/routes/internal.py
++app/api/routes/telegram.py
++app/application/__init__.py
++app/application/services/__init__.py
++app/application/services/deduplication.py
++app/application/services/source_collection.py
++app/application/services/topic_processing.py
++app/bot/__init__.py
++app/bot/application.py
++app/bot/handlers/__init__.py
++app/bot/handlers/callbacks.py
++app/bot/handlers/channels.py
++app/bot/handlers/start.py
++app/bot/handlers/topic_creation.py
++app/bot/handlers/topics_list.py
++app/bot/keyboards/__init__.py
++app/bot/keyboards/channels.py
++app/bot/keyboards/main_menu.py
++app/bot/keyboards/topic_creation.py
++app/bot/keyboards/topic_details.py
++app/bot/keyboards/topics_list.py
++app/domain/__init__.py
++app/domain/enums.py
++app/domain/policies/__init__.py
++app/domain/policies/normalization.py
++app/domain/policies/ranking.py
++app/domain/value_objects.py
++app/infrastructure/__init__.py
++app/infrastructure/db/__init__.py
++app/infrastructure/db/base.py
++app/infrastructure/db/models.py
++app/infrastructure/db/session.py
++app/infrastructure/llm/__init__.py
++app/infrastructure/llm/base.py
++app/infrastructure/llm/openrouter.py
++app/infrastructure/providers/__init__.py
++app/infrastructure/providers/news/__init__.py
++app/infrastructure/providers/news/base.py
++app/infrastructure/providers/news/factory.py
++app/infrastructure/providers/news/mock.py
++app/infrastructure/repositories/__init__.py
++app/infrastructure/repositories/channels.py
++app/infrastructure/repositories/job_runs.py
++app/infrastructure/repositories/sent_stories.py
++app/infrastructure/repositories/stories.py
++app/infrastructure/repositories/topics.py
++app/infrastructure/repositories/users.py
++app/infrastructure/scheduler/__init__.py
++app/infrastructure/scheduler/service.py
++app/infrastructure/sources/__init__.py
++app/infrastructure/sources/base.py
++app/infrastructure/sources/factory.py
++app/infrastructure/sources/mock.py
++app/infrastructure/sources/openrouter_web_search.py
++app/infrastructure/sources/registry.py
++app/infrastructure/sources/rss.py
++app/infrastructure/sources/telegram_channel.py
++app/infrastructure/telegram/__init__.py
++app/infrastructure/telegram/callbacks.py
++app/infrastructure/telegram/publisher.py
++app/infrastructure/telegram/service_messages.py
++app/main.py
++app/scheduler_runner.py
++app/schemas/__init__.py
++app/schemas/articles.py
++app/schemas/discovery.py
++app/schemas/llm.py
++app/schemas/publishing.py
++app/schemas/sources.py
++app/schemas/topics.py
++app/search_v2/__init__.py
++app/search_v2/article_filter.py
++app/search_v2/strategy.py
++app/shared/__init__.py
++app/shared/logging.py
++app/shared/settings.py
++docker-compose.yml
++docker/app/Dockerfile
++pyproject.toml
++tests/conftest.py
++tests/test_deduplication.py
++tests/test_disambiguation_diversity.py
++tests/test_freshness_guard_v51.py
++tests/test_normalization.py
++tests/test_quality_engine_v5.py
++tests/test_quality_engine_v52.py
++tests/test_quality_engine_v53.py
++tests/test_quality_engine_v54.py
++tests/test_quality_filters.py
++tests/test_ranking.py
++tests/test_search_v2.py
++tests/test_source_collection.py
+diff -ruN base/newsbot_v5_4_retrieval_reliability/PATCH_V5_4_TO_V6.diff work/newsbot_v6_universal_search_core/PATCH_V5_4_TO_V6.diff
+--- base/newsbot_v5_4_retrieval_reliability/PATCH_V5_4_TO_V6.diff	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/PATCH_V5_4_TO_V6.diff	2026-04-26 13:48:44.216354845 +0000
+@@ -0,0 +1,351 @@
++diff -ruN base/newsbot_v5_4_retrieval_reliability/.env.example work/newsbot_v6_universal_search_core/.env.example
++--- base/newsbot_v5_4_retrieval_reliability/.env.example	2026-04-26 09:33:05.000000000 +0000
+++++ work/newsbot_v6_universal_search_core/.env.example	2026-04-26 13:38:45.080863742 +0000
++@@ -55,3 +55,7 @@
++ OPENROUTER_ADAPTIVE_TARGET_CANDIDATES=3
++ OPENROUTER_MIN_SEARCH_PASSES=2
++ IMMEDIATE_REPEAT_GUARD_MINUTES=15
+++
+++# v6 universal search core
+++OPENROUTER_VERIFIED_HARD_MAX_ARTICLE_AGE_HOURS=720
+++OPENROUTER_FOLLOWUP_HARD_MAX_ARTICLE_AGE_HOURS=72
++diff -ruN base/newsbot_v5_4_retrieval_reliability/ADDED_FILES_V6.md work/newsbot_v6_universal_search_core/ADDED_FILES_V6.md
++--- base/newsbot_v5_4_retrieval_reliability/ADDED_FILES_V6.md	1970-01-01 00:00:00.000000000 +0000
+++++ work/newsbot_v6_universal_search_core/ADDED_FILES_V6.md	2026-04-26 13:44:56.420052075 +0000
++@@ -0,0 +1,7 @@
+++# Added files in v6
+++
+++- DEBUG_GUIDE_V6_RU.md
+++- QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
+++- START_HERE_V6_RU.md
+++- app/search_v2/core.py
+++- tests/test_quality_engine_v6.py
++diff -ruN base/newsbot_v5_4_retrieval_reliability/CHANGED_FILES_V6.md work/newsbot_v6_universal_search_core/CHANGED_FILES_V6.md
++--- base/newsbot_v5_4_retrieval_reliability/CHANGED_FILES_V6.md	1970-01-01 00:00:00.000000000 +0000
+++++ work/newsbot_v6_universal_search_core/CHANGED_FILES_V6.md	2026-04-26 13:44:56.605008291 +0000
++@@ -0,0 +1,8 @@
+++# Changed files in v6
+++
+++- .env.example
+++- app/infrastructure/sources/openrouter_web_search.py
+++- app/search_v2/__init__.py
+++- app/search_v2/article_filter.py
+++- app/search_v2/strategy.py
+++- app/shared/settings.py
++diff -ruN base/newsbot_v5_4_retrieval_reliability/DEBUG_GUIDE_V6_RU.md work/newsbot_v6_universal_search_core/DEBUG_GUIDE_V6_RU.md
++--- base/newsbot_v5_4_retrieval_reliability/DEBUG_GUIDE_V6_RU.md	1970-01-01 00:00:00.000000000 +0000
+++++ work/newsbot_v6_universal_search_core/DEBUG_GUIDE_V6_RU.md	2026-04-26 13:41:59.109323042 +0000
++@@ -0,0 +1,13 @@
+++# Debug Guide v6
+++
+++Если бот пишет `найдено 0`, теперь нужно смотреть не только `source_fetch_empty`, но и `candidate_decision`.
+++
+++Примеры интерпретации:
+++
+++- `raw_count > 0`, но `accepted_count=0`: поиск нашёл ссылки, фильтры отбраковали их.
+++- `candidate_decision status=old`: статья слишком старая, это ожидаемый reject.
+++- `candidate_decision status=weak_but_usable`: статья без verified date, но OpenRouter snippet достаточно прямой.
+++- `candidate_decision reason=topic_news_hub_page`: это страница-раздел, не статья.
+++- `candidate_decision reason=wrong_entity_context`: совпала не та сущность.
+++
+++Для следующего ревью кидай `search_debug_only.txt`, а не скриншоты.
++diff -ruN base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_AFTER.txt work/newsbot_v6_universal_search_core/MANIFEST_V6_AFTER.txt
++--- base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_AFTER.txt	1970-01-01 00:00:00.000000000 +0000
+++++ work/newsbot_v6_universal_search_core/MANIFEST_V6_AFTER.txt	2026-04-26 13:47:54.830399157 +0000
++@@ -0,0 +1,152 @@
+++.env.example
+++ADDED_FILES_V5_2.md
+++ADDED_FILES_V5_3.md
+++ADDED_FILES_V5_4.md
+++ADDED_FILES_V6.md
+++CHANGED_FILES.md
+++CHANGED_FILES_V5_1.md
+++CHANGED_FILES_V5_2.md
+++CHANGED_FILES_V5_3.md
+++CHANGED_FILES_V5_4.md
+++CHANGED_FILES_V6.md
+++DEBUG_GUIDE_V6_RU.md
+++MANIFEST_AFTER.txt
+++MANIFEST_BEFORE.txt
+++MANIFEST_V5_1_AFTER.txt
+++MANIFEST_V5_1_BEFORE_V5_2.txt
+++MANIFEST_V5_2_AFTER.txt
+++MANIFEST_V5_2_BEFORE_V5_3.txt
+++MANIFEST_V5_3_AFTER.txt
+++MANIFEST_V5_3_BEFORE_V5_4.txt
+++MANIFEST_V5_4_AFTER.txt
+++MANIFEST_V5_BEFORE_V51.txt
+++MANIFEST_V6_AFTER.txt
+++MANIFEST_V6_BEFORE.txt
+++PATCH.diff
+++PATCH_V5_1_TO_V5_2.diff
+++PATCH_V5_2_TO_V5_3.diff
+++PATCH_V5_3_TO_V5_4.diff
+++PATCH_V5_4_TO_V6.diff
+++PATCH_V5_TO_V5_1.diff
+++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+++QUALITY_ENGINE_V5_2_BALANCE_RU.md
+++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
+++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
+++QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
+++README.md
+++REMOVED_FILES.md
+++REMOVED_FILES_V5_1.md
+++REMOVED_FILES_V5_2.md
+++REMOVED_FILES_V5_3.md
+++REMOVED_FILES_V5_4.md
+++REMOVED_FILES_V6.md
+++START_HERE_RU.md
+++START_HERE_V5_2_RU.md
+++START_HERE_V5_3_RU.md
+++START_HERE_V5_4_RU.md
+++START_HERE_V6_RU.md
+++TECHNICAL_DECISIONS.md
+++TEST_REPORT.md
+++TEST_REPORT_V5_1.md
+++TEST_REPORT_V5_2.md
+++TEST_REPORT_V5_3.md
+++TEST_REPORT_V5_4.md
+++TEST_REPORT_V6.md
+++app/__init__.py
+++app/api/__init__.py
+++app/api/routes/__init__.py
+++app/api/routes/internal.py
+++app/api/routes/telegram.py
+++app/application/__init__.py
+++app/application/services/__init__.py
+++app/application/services/deduplication.py
+++app/application/services/source_collection.py
+++app/application/services/topic_processing.py
+++app/bot/__init__.py
+++app/bot/application.py
+++app/bot/handlers/__init__.py
+++app/bot/handlers/callbacks.py
+++app/bot/handlers/channels.py
+++app/bot/handlers/start.py
+++app/bot/handlers/topic_creation.py
+++app/bot/handlers/topics_list.py
+++app/bot/keyboards/__init__.py
+++app/bot/keyboards/channels.py
+++app/bot/keyboards/main_menu.py
+++app/bot/keyboards/topic_creation.py
+++app/bot/keyboards/topic_details.py
+++app/bot/keyboards/topics_list.py
+++app/domain/__init__.py
+++app/domain/enums.py
+++app/domain/policies/__init__.py
+++app/domain/policies/normalization.py
+++app/domain/policies/ranking.py
+++app/domain/value_objects.py
+++app/infrastructure/__init__.py
+++app/infrastructure/db/__init__.py
+++app/infrastructure/db/base.py
+++app/infrastructure/db/models.py
+++app/infrastructure/db/session.py
+++app/infrastructure/llm/__init__.py
+++app/infrastructure/llm/base.py
+++app/infrastructure/llm/openrouter.py
+++app/infrastructure/providers/__init__.py
+++app/infrastructure/providers/news/__init__.py
+++app/infrastructure/providers/news/base.py
+++app/infrastructure/providers/news/factory.py
+++app/infrastructure/providers/news/mock.py
+++app/infrastructure/repositories/__init__.py
+++app/infrastructure/repositories/channels.py
+++app/infrastructure/repositories/job_runs.py
+++app/infrastructure/repositories/sent_stories.py
+++app/infrastructure/repositories/stories.py
+++app/infrastructure/repositories/topics.py
+++app/infrastructure/repositories/users.py
+++app/infrastructure/scheduler/__init__.py
+++app/infrastructure/scheduler/service.py
+++app/infrastructure/sources/__init__.py
+++app/infrastructure/sources/base.py
+++app/infrastructure/sources/factory.py
+++app/infrastructure/sources/mock.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/infrastructure/sources/registry.py
+++app/infrastructure/sources/rss.py
+++app/infrastructure/sources/telegram_channel.py
+++app/infrastructure/telegram/__init__.py
+++app/infrastructure/telegram/callbacks.py
+++app/infrastructure/telegram/publisher.py
+++app/infrastructure/telegram/service_messages.py
+++app/main.py
+++app/scheduler_runner.py
+++app/schemas/__init__.py
+++app/schemas/articles.py
+++app/schemas/discovery.py
+++app/schemas/llm.py
+++app/schemas/publishing.py
+++app/schemas/sources.py
+++app/schemas/topics.py
+++app/search_v2/__init__.py
+++app/search_v2/article_filter.py
+++app/search_v2/core.py
+++app/search_v2/strategy.py
+++app/shared/__init__.py
+++app/shared/logging.py
+++app/shared/settings.py
+++docker-compose.yml
+++docker/app/Dockerfile
+++pyproject.toml
+++tests/conftest.py
+++tests/test_deduplication.py
+++tests/test_disambiguation_diversity.py
+++tests/test_freshness_guard_v51.py
+++tests/test_normalization.py
+++tests/test_quality_engine_v5.py
+++tests/test_quality_engine_v52.py
+++tests/test_quality_engine_v53.py
+++tests/test_quality_engine_v54.py
+++tests/test_quality_engine_v6.py
+++tests/test_quality_filters.py
+++tests/test_ranking.py
+++tests/test_search_v2.py
+++tests/test_source_collection.py
++diff -ruN base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_BEFORE.txt work/newsbot_v6_universal_search_core/MANIFEST_V6_BEFORE.txt
++--- base/newsbot_v5_4_retrieval_reliability/MANIFEST_V6_BEFORE.txt	1970-01-01 00:00:00.000000000 +0000
+++++ work/newsbot_v6_universal_search_core/MANIFEST_V6_BEFORE.txt	2026-04-26 13:47:54.917279833 +0000
++@@ -0,0 +1,140 @@
+++.env.example
+++ADDED_FILES_V5_2.md
+++ADDED_FILES_V5_3.md
+++ADDED_FILES_V5_4.md
+++CHANGED_FILES.md
+++CHANGED_FILES_V5_1.md
+++CHANGED_FILES_V5_2.md
+++CHANGED_FILES_V5_3.md
+++CHANGED_FILES_V5_4.md
+++MANIFEST_AFTER.txt
+++MANIFEST_BEFORE.txt
+++MANIFEST_V5_1_AFTER.txt
+++MANIFEST_V5_1_BEFORE_V5_2.txt
+++MANIFEST_V5_2_AFTER.txt
+++MANIFEST_V5_2_BEFORE_V5_3.txt
+++MANIFEST_V5_3_AFTER.txt
+++MANIFEST_V5_3_BEFORE_V5_4.txt
+++MANIFEST_V5_4_AFTER.txt
+++MANIFEST_V5_BEFORE_V51.txt
+++PATCH.diff
+++PATCH_V5_1_TO_V5_2.diff
+++PATCH_V5_2_TO_V5_3.diff
+++PATCH_V5_3_TO_V5_4.diff
+++PATCH_V5_TO_V5_1.diff
+++QUALITY_ENGINE_V5_1_FRESHNESS_RU.md
+++QUALITY_ENGINE_V5_2_BALANCE_RU.md
+++QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+++QUALITY_ENGINE_V5_4_RETRIEVAL_RU.md
+++QUALITY_ENGINE_V5_UNIVERSAL_RU.md
+++README.md
+++REMOVED_FILES.md
+++REMOVED_FILES_V5_1.md
+++REMOVED_FILES_V5_2.md
+++REMOVED_FILES_V5_3.md
+++REMOVED_FILES_V5_4.md
+++START_HERE_RU.md
+++START_HERE_V5_2_RU.md
+++START_HERE_V5_3_RU.md
+++START_HERE_V5_4_RU.md
+++TECHNICAL_DECISIONS.md
+++TEST_REPORT.md
+++TEST_REPORT_V5_1.md
+++TEST_REPORT_V5_2.md
+++TEST_REPORT_V5_3.md
+++TEST_REPORT_V5_4.md
+++app/__init__.py
+++app/api/__init__.py
+++app/api/routes/__init__.py
+++app/api/routes/internal.py
+++app/api/routes/telegram.py
+++app/application/__init__.py
+++app/application/services/__init__.py
+++app/application/services/deduplication.py
+++app/application/services/source_collection.py
+++app/application/services/topic_processing.py
+++app/bot/__init__.py
+++app/bot/application.py
+++app/bot/handlers/__init__.py
+++app/bot/handlers/callbacks.py
+++app/bot/handlers/channels.py
+++app/bot/handlers/start.py
+++app/bot/handlers/topic_creation.py
+++app/bot/handlers/topics_list.py
+++app/bot/keyboards/__init__.py
+++app/bot/keyboards/channels.py
+++app/bot/keyboards/main_menu.py
+++app/bot/keyboards/topic_creation.py
+++app/bot/keyboards/topic_details.py
+++app/bot/keyboards/topics_list.py
+++app/domain/__init__.py
+++app/domain/enums.py
+++app/domain/policies/__init__.py
+++app/domain/policies/normalization.py
+++app/domain/policies/ranking.py
+++app/domain/value_objects.py
+++app/infrastructure/__init__.py
+++app/infrastructure/db/__init__.py
+++app/infrastructure/db/base.py
+++app/infrastructure/db/models.py
+++app/infrastructure/db/session.py
+++app/infrastructure/llm/__init__.py
+++app/infrastructure/llm/base.py
+++app/infrastructure/llm/openrouter.py
+++app/infrastructure/providers/__init__.py
+++app/infrastructure/providers/news/__init__.py
+++app/infrastructure/providers/news/base.py
+++app/infrastructure/providers/news/factory.py
+++app/infrastructure/providers/news/mock.py
+++app/infrastructure/repositories/__init__.py
+++app/infrastructure/repositories/channels.py
+++app/infrastructure/repositories/job_runs.py
+++app/infrastructure/repositories/sent_stories.py
+++app/infrastructure/repositories/stories.py
+++app/infrastructure/repositories/topics.py
+++app/infrastructure/repositories/users.py
+++app/infrastructure/scheduler/__init__.py
+++app/infrastructure/scheduler/service.py
+++app/infrastructure/sources/__init__.py
+++app/infrastructure/sources/base.py
+++app/infrastructure/sources/factory.py
+++app/infrastructure/sources/mock.py
+++app/infrastructure/sources/openrouter_web_search.py
+++app/infrastructure/sources/registry.py
+++app/infrastructure/sources/rss.py
+++app/infrastructure/sources/telegram_channel.py
+++app/infrastructure/telegram/__init__.py
+++app/infrastructure/telegram/callbacks.py
+++app/infrastructure/telegram/publisher.py
+++app/infrastructure/telegram/service_messages.py
+++app/main.py
+++app/scheduler_runner.py
+++app/schemas/__init__.py
+++app/schemas/articles.py
+++app/schemas/discovery.py
+++app/schemas/llm.py
+++app/schemas/publishing.py
+++app/schemas/sources.py
+++app/schemas/topics.py
+++app/search_v2/__init__.py
+++app/search_v2/article_filter.py
+++app/search_v2/strategy.py
+++app/shared/__init__.py
+++app/shared/logging.py
+++app/shared/settings.py
+++docker-compose.yml
+++docker/app/Dockerfile
+++pyproject.toml
+++tests/conftest.py
+++tests/test_deduplication.py
+++tests/test_disambiguation_diversity.py
+++tests/test_freshness_guard_v51.py
+++tests/test_normalization.py
+++tests/test_quality_engine_v5.py
+++tests/test_quality_engine_v52.py
+++tests/test_quality_engine_v53.py
+++tests/test_quality_engine_v54.py
+++tests/test_quality_filters.py
+++tests/test_ranking.py
+++tests/test_search_v2.py
+++tests/test_source_collection.py
+diff -ruN base/newsbot_v5_4_retrieval_reliability/QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md work/newsbot_v6_universal_search_core/QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md
+--- base/newsbot_v5_4_retrieval_reliability/QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/QUALITY_ENGINE_V6_UNIVERSAL_CORE_RU.md	2026-04-26 13:41:58.710180965 +0000
+@@ -0,0 +1,81 @@
++# Quality Engine v6 — Universal Search Core
++
++Цель v6: не подгонять бота под конкретные темы, а сделать более устойчивое универсальное поисковое ядро новостей.
++
++## Что изменено
++
++1. **CandidateStatus вместо тупого pass/fail**
++
++Теперь кандидат получает один из статусов:
++
++- `accepted` — подтверждённая дата и нормальное качество;
++- `weak_but_usable` — прямой сильный кандидат из OpenRouter search snippet, но без подтверждённой даты;
++- `old` — слишком старая статья;
++- `hub_page` — страница-раздел / news hub;
++- `wrong_entity` — не та сущность;
++- `rejected` — остальные причины отказа.
++
++2. **Гибкая freshness-модель**
++
++Больше не режем все статьи старше 7 дней сразу. Теперь:
++
++- 0–7 дней — лучший вариант;
++- 8–30 дней — можно брать, если статья verified и прямой релевантности достаточно;
++- старше 30 дней — отбрасывается;
++- без даты — можно только как `weak_but_usable`, если OpenRouter дал сильный snippet и тема прямо в заголовке/описании.
++
++3. **Generic suffix normalization**
++
++Пользовательские формы вроде `NAVI TEAM`, `Rome city`, `OpenAI official` не должны превращаться в обязательные точные фразы. Например `NAVI TEAM` нормализуется в `navi`, но raw-вариант всё равно используется в query plan.
++
++4. **Search snippet rescue внутри одного запуска**
++
++Если сайт блокирует HTML или не отдаёт дату, но OpenRouter search annotation содержит прямой title/snippet, кандидат может пройти как weak freshness. Такие статьи штрафуются в ranking и ограничиваются настройкой `OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST`.
++
++5. **Лучшие debug-логи**
++
++Добавлен `candidate_decision`, где видно:
++
++- status;
++- reason;
++- directness_score;
++- article_confidence;
++- freshness_verified;
++- published_at_source.
++
++## Что v6 НЕ делает
++
++- Не добавляет правила вида `if topic == "bitcoin"`.
++- Не подгоняет результаты под NAVI/Kyiv/bitcoin/Dyson/etc.
++- Не отключает freshness guard полностью.
++- Не добивает дайджест мусором ради количества.
++
++## Новые настройки
++
++```env
++OPENROUTER_VERIFIED_HARD_MAX_ARTICLE_AGE_HOURS=720
++OPENROUTER_FOLLOWUP_HARD_MAX_ARTICLE_AGE_HOURS=72
++```
++
++Остальные настройки от v5.4 остаются актуальными.
++
++## Как тестировать
++
++Сначала проверь пары и широкие темы:
++
++```text
++bitcoin
++Kyiv / Київ / Киев
++NAVI TEAM / NAVI / Natus Vincere
++Dyson / Дайсон / дайсан
++Paris / Париж
++Trump / Трамп
++```
++
++Главное смотреть:
++
++1. стало ли меньше ложных нулей;
++2. не полезли ли реально старые статьи;
++3. не проходят ли news hub pages;
++4. появляются ли `weak_but_usable` только когда verified-кандидатов мало;
++5. повторный запуск сразу после нормального дайджеста не должен слать старые остатки.
+diff -ruN base/newsbot_v5_4_retrieval_reliability/REMOVED_FILES_V6.md work/newsbot_v6_universal_search_core/REMOVED_FILES_V6.md
+--- base/newsbot_v5_4_retrieval_reliability/REMOVED_FILES_V6.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/REMOVED_FILES_V6.md	2026-04-26 13:44:56.508526326 +0000
+@@ -0,0 +1,3 @@
++# Removed files in v6
++
++No working files removed.
+diff -ruN base/newsbot_v5_4_retrieval_reliability/START_HERE_V6_RU.md work/newsbot_v6_universal_search_core/START_HERE_V6_RU.md
+--- base/newsbot_v5_4_retrieval_reliability/START_HERE_V6_RU.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/START_HERE_V6_RU.md	2026-04-26 13:41:58.907782073 +0000
+@@ -0,0 +1,40 @@
++# START HERE — v6 Universal Search Core
++
++1. Распакуй архив.
++2. Перенеси свой `.env` или обнови существующий `.env`.
++3. Добавь новые настройки:
++
++```env
++OPENROUTER_VERIFIED_HARD_MAX_ARTICLE_AGE_HOURS=720
++OPENROUTER_FOLLOWUP_HARD_MAX_ARTICLE_AGE_HOURS=72
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=2
++OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++OPENROUTER_DEBUG_REJECTIONS=true
++APP_DEBUG=true
++```
++
++4. Запуск через Docker:
++
++```cmd
++docker compose up --build --force-recreate
++```
++
++5. Для сбора логов в файл:
++
++```cmd
++docker compose up --build --force-recreate > debug.log 2>&1
++```
++
++6. В твоём compose сервис называется `app`, не `bot`. Проверка настроек:
++
++```cmd
++docker compose run --rm app python -c "from app.shared.settings import get_settings; s=get_settings(); print('model=',s.openrouter_search_model or s.openrouter_default_model); print('max_results=',s.openrouter_web_search_max_results); print('per_call=',s.openrouter_web_search_results_per_call); print('max_calls=',s.openrouter_web_search_max_calls_per_topic); print('budget=',s.openrouter_topic_budget_usd); print('soft_age=',s.openrouter_max_article_age_hours); print('hard_age=',s.openrouter_verified_hard_max_article_age_hours); print('weak_fallback=',s.openrouter_allow_search_snippet_fallback)"
++```
++
++7. Фильтр важных строк из логов:
++
++```cmd
++findstr /I "source_fetch_plan source_fetch_pass source_fetch_empty source_fetch_success candidate_decision candidate_rejected" debug.log > search_debug_only.txt
++```
++
++Важно: не присылай `.env` целиком и не присылай лог с токеном бота. Если токен уже попал в лог, перевыпусти его через BotFather.
+diff -ruN base/newsbot_v5_4_retrieval_reliability/TEST_REPORT_V6.md work/newsbot_v6_universal_search_core/TEST_REPORT_V6.md
+--- base/newsbot_v5_4_retrieval_reliability/TEST_REPORT_V6.md	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/TEST_REPORT_V6.md	2026-04-26 13:47:45.022280322 +0000
+@@ -0,0 +1,24 @@
++# Test report v6
++
++## Static checks
++
++- Python source syntax checked via direct `compile(source, filename, "exec")` for changed Python files: PASS.
++- Deterministic candidate checks for v6 core logic: PASS.
++- Zip integrity: PASS after archive creation.
++
++## Deterministic checks covered
++
++- `NAVI TEAM` normalizes to `navi` so generic suffix `TEAM` does not become a required exact phrase.
++- `Rome city` normalizes to `rome` when the remaining term is a known city alias.
++- A direct NAVI/CS2 article no longer fails only because it lacks the exact phrase `NAVI TEAM`.
++- A strong OpenRouter search annotation without verified date can become `weak_but_usable` instead of being dropped.
++- A verified article just outside the 7-day soft window can still be accepted if it is inside the 30-day hard window.
++- A very old article is still rejected as `old`.
++
++## Not run here
++
++- Live OpenRouter calls.
++- Live Telegram publishing.
++- Full Docker integration with your `.env`.
++
++Those require your real keys and local Docker environment.
+diff -ruN base/newsbot_v5_4_retrieval_reliability/app/infrastructure/sources/openrouter_web_search.py work/newsbot_v6_universal_search_core/app/infrastructure/sources/openrouter_web_search.py
+--- base/newsbot_v5_4_retrieval_reliability/app/infrastructure/sources/openrouter_web_search.py	2026-04-26 10:20:31.000000000 +0000
++++ work/newsbot_v6_universal_search_core/app/infrastructure/sources/openrouter_web_search.py	2026-04-26 13:39:34.439709916 +0000
+@@ -12,7 +12,7 @@
+ 
+ from app.domain.enums import SourceType
+ from app.schemas.sources import RawSourceItem
+-from app.search_v2 import build_search_plan, extract_html_metadata, is_candidate_article, topic_match_score, article_confidence, candidate_quality
++from app.search_v2 import build_search_plan, extract_html_metadata, article_confidence, candidate_quality, evaluate_candidate, FreshnessPolicy
+ from app.shared.logging import get_logger
+ from app.shared.settings import get_settings
+ 
+@@ -94,6 +94,15 @@
+         self._search_snippet_fallback_min_confidence = max(settings.openrouter_search_snippet_fallback_min_confidence, 0)
+         self._adaptive_target_candidates = max(settings.openrouter_adaptive_target_candidates, 1)
+         self._min_search_passes = max(settings.openrouter_min_search_passes, 1)
++        self._freshness_policy = FreshnessPolicy(
++            soft_age_hours=self._max_article_age_hours,
++            hard_age_hours=max(settings.openrouter_verified_hard_max_article_age_hours, self._max_article_age_hours),
++            followup_hard_age_hours=max(settings.openrouter_followup_hard_max_article_age_hours, 24),
++            future_skew_hours=self._future_skew_hours,
++            allow_weak_undated=self._allow_search_snippet_fallback,
++            weak_min_directness=self._search_snippet_fallback_min_directness,
++            weak_min_article_confidence=self._search_snippet_fallback_min_confidence,
++        )
+ 
+     async def fetch(
+         self,
+@@ -401,9 +410,14 @@
+         plan,
+         allow_search_snippet_fallback: bool = False,
+     ) -> list[RawSourceItem]:
++        """Enrich links and run the v6 balanced candidate decision layer.
++
++        v5.x rejected candidates too early: missing metadata date, 8-day-old verified
++        article, or generic suffixes such as "TEAM" could all zero out a topic. v6
++        keeps hard rejects for hubs/wrong entity/old content, but lets high-directness
++        search annotations through as weak-but-usable candidates.
++        """
+         enriched: list[RawSourceItem] = []
+-        freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+-        future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
+         async with httpx.AsyncClient(timeout=min(self._timeout_seconds, 15.0), follow_redirects=True) as client:
+             for item in items:
+                 url = str(item.url) if item.url is not None else None
+@@ -419,7 +433,7 @@
+                             to_dt=to_dt,
+                             plan=plan,
+                             reason=f"http_{response.status_code}",
+-                            allow_search_snippet_fallback=allow_search_snippet_fallback,
++                            allow_search_snippet_fallback=True,
+                         )
+                         if fallback is not None:
+                             enriched.append(fallback)
+@@ -431,7 +445,7 @@
+                         to_dt=to_dt,
+                         plan=plan,
+                         reason=type(exc).__name__,
+-                        allow_search_snippet_fallback=allow_search_snippet_fallback,
++                        allow_search_snippet_fallback=True,
+                     )
+                     if fallback is not None:
+                         enriched.append(fallback)
+@@ -441,83 +455,53 @@
+                 canonical_url = meta.canonical_url or self._extract_canonical_url(response.text) or str(response.url)
+                 candidate_title = meta.title or item.title
+                 candidate_desc = meta.description or item.description
+-
+-                published_at, published_source = self._extract_best_publish_datetime(
+-                    html=response.text,
+-                    canonical_url=canonical_url,
+-                    last_modified=response.headers.get("last-modified"),
+-                )
+-                if published_at is None:
+-                    if allow_search_snippet_fallback:
+-                        fallback = self._fallback_candidate(
+-                            item.model_copy(update={"title": candidate_title, "description": candidate_desc}),
+-                            from_dt=from_dt,
+-                            to_dt=to_dt,
+-                            plan=plan,
+-                            reason="missing_verified_publish_date",
+-                            allow_search_snippet_fallback=True,
+-                        )
+-                        if fallback is not None:
+-                            enriched.append(fallback)
+-                        continue
+-                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "missing_verified_publish_date")
+-                    continue
+-                if published_at.tzinfo is None:
+-                    published_at = published_at.replace(tzinfo=timezone.utc)
+-                published_at = published_at.astimezone(timezone.utc)
+-
+-                if self._is_before_freshness_floor(published_at, freshness_floor, published_source):
+-                    self._log_rejection(
+-                        plan,
+-                        canonical_url,
+-                        candidate_title,
+-                        candidate_desc,
+-                        f"outside_freshness_window:{published_source}:{published_at.isoformat()}",
+-                    )
+-                    continue
+-                if published_at > future_ceiling:
+-                    self._log_rejection(
+-                        plan,
+-                        canonical_url,
+-                        candidate_title,
+-                        candidate_desc,
+-                        f"future_publish_date:{published_source}:{published_at.isoformat()}",
+-                    )
+-                    continue
+-
+                 source_language = item.source_language or meta.language or self._extract_language(response.text)
+                 parsed_url = self._safe_http_url(canonical_url)
+                 if parsed_url is None or not self._looks_like_news_article(canonical_url, candidate_title, plan=plan):
+                     self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "url_does_not_look_like_news_article")
+                     continue
+-                if article_confidence(canonical_url, candidate_title, candidate_desc) < 1:
+-                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "low_article_confidence")
+-                    continue
+ 
+-                quality = candidate_quality(plan, url=canonical_url, title=candidate_title, description=candidate_desc)
+-                if not quality.accepted:
+-                    self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, quality.reason or "rejected")
++                published_at, published_source = self._extract_best_publish_datetime(
++                    html=response.text,
++                    canonical_url=canonical_url,
++                    last_modified=response.headers.get("last-modified"),
++                )
++                decision = evaluate_candidate(
++                    plan,
++                    url=canonical_url,
++                    title=candidate_title,
++                    description=candidate_desc,
++                    published_at=published_at,
++                    published_at_source=published_source,
++                    to_dt=to_dt,
++                    policy=self._freshness_policy,
++                    search_annotation=bool(item.metadata.get("search_annotation")),
++                    search_snippet=bool(item.metadata.get("search_snippet")),
++                )
++                if not decision.usable:
++                    self._log_decision(plan, canonical_url, candidate_title, candidate_desc, decision)
+                     continue
+ 
+                 enriched.append(item.model_copy(update={
+                     "url": parsed_url,
+                     "title": candidate_title,
+                     "description": candidate_desc,
+-                    "published_at": published_at,
++                    "published_at": decision.published_at or to_dt,
+                     "source_language": source_language,
+                     "metadata": {
+                         **item.metadata,
+                         "canonical_url": canonical_url,
+-                        "topic_match_score": quality.score,
+-                        "directness_score": quality.directness_score,
+-                        "article_confidence": article_confidence(canonical_url, candidate_title, candidate_desc),
+-                        "quality_reason": "accepted",
+-                        "published_at_source": published_source,
+-                        "freshness_verified": published_source in {"metadata", "url"},
+-                        "freshness_floor": freshness_floor.isoformat(),
++                        "topic_match_score": decision.score,
++                        "directness_score": decision.directness_score,
++                        "article_confidence": decision.article_confidence,
++                        "candidate_status": decision.status.value,
++                        "quality_reason": decision.reason,
++                        "published_at_source": decision.published_at_source,
++                        "freshness_verified": decision.freshness_verified,
++                        **decision.metadata,
+                     },
+                 }))
+-        enriched.sort(key=lambda x: (int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
++        enriched.sort(key=lambda x: (int(x.metadata.get("candidate_status") == "accepted"), int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
+         return enriched
+ 
+     def _fallback_candidate(
+@@ -538,62 +522,38 @@
+             return None
+ 
+         url_date = self._extract_date_from_url(url)
+-        if url_date is None:
+-            can_use_search_snippet = (
+-                allow_search_snippet_fallback
+-                and bool(item.metadata.get("search_annotation"))
+-                and bool(item.metadata.get("search_snippet"))
+-                and bool((item.title or "").strip())
+-                and bool((item.description or "").strip())
+-            )
+-            if not can_use_search_snippet:
+-                if self._require_verified_publish_date and not self._allow_undated_fallback:
+-                    self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
+-                    return None
+-                if not self._allow_undated_fallback:
+-                    self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
+-                    return None
+-                published_at = to_dt
+-                published_source = "fallback_unverified"
+-            else:
+-                published_at = to_dt
+-                published_source = "search_snippet"
+-        else:
+-            published_at = url_date
+-            published_source = "url"
+-
+-        if published_at.tzinfo is None:
+-            published_at = published_at.replace(tzinfo=timezone.utc)
+-        published_at = published_at.astimezone(timezone.utc)
+-        freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+-        future_ceiling = to_dt + timedelta(hours=self._future_skew_hours)
+-        if self._is_before_freshness_floor(published_at, freshness_floor, published_source):
+-            self._log_rejection(plan, url, item.title, item.description, f"fallback_outside_freshness_window:{published_source}:{published_at.isoformat()}")
+-            return None
+-        if published_at > future_ceiling:
+-            self._log_rejection(plan, url, item.title, item.description, f"fallback_future_publish_date:{published_source}:{published_at.isoformat()}")
+-            return None
+-
+-        quality = candidate_quality(plan, url=url, title=item.title, description=item.description)
+-        article_conf = article_confidence(url, item.title, item.description)
+-        required_directness = self._search_snippet_fallback_min_directness if published_source == "search_snippet" else plan.minimum_directness + 2
+-        required_confidence = self._search_snippet_fallback_min_confidence if published_source == "search_snippet" else 1
+-        if not quality.accepted or quality.directness_score < required_directness or article_conf < required_confidence:
+-            self._log_rejection(plan, url, item.title, item.description, quality.reason or f"fallback_rejected:{reason}")
++        published_at = url_date
++        published_source = "url" if url_date is not None else None
++        decision = evaluate_candidate(
++            plan,
++            url=url,
++            title=item.title,
++            description=item.description,
++            published_at=published_at,
++            published_at_source=published_source,
++            to_dt=to_dt,
++            policy=self._freshness_policy,
++            search_annotation=bool(item.metadata.get("search_annotation")) and (allow_search_snippet_fallback or self._allow_search_snippet_fallback),
++            search_snippet=bool(item.metadata.get("search_snippet")) and (allow_search_snippet_fallback or self._allow_search_snippet_fallback),
++        )
++        if not decision.usable:
++            self._log_decision(plan, url, item.title, item.description, decision, prefix=f"fallback:{reason}")
+             return None
+         return item.model_copy(update={
+-            "published_at": published_at,
++            "published_at": decision.published_at or to_dt,
+             "metadata": {
+                 **item.metadata,
+                 "canonical_url": url,
+-                "topic_match_score": quality.score,
+-                "directness_score": quality.directness_score,
+-                "article_confidence": article_conf,
++                "topic_match_score": decision.score,
++                "directness_score": decision.directness_score,
++                "article_confidence": decision.article_confidence,
+                 "metadata_fallback": True,
+                 "metadata_fallback_reason": reason,
+-                "published_at_source": published_source,
+-                "freshness_verified": published_source in {"url", "metadata"},
+-                "freshness_floor": freshness_floor.isoformat(),
++                "candidate_status": decision.status.value,
++                "quality_reason": decision.reason,
++                "published_at_source": decision.published_at_source,
++                "freshness_verified": decision.freshness_verified,
++                **decision.metadata,
+             },
+         })
+ 
+@@ -659,6 +619,26 @@
+             url=url,
+             title=title,
+         )
++
++    def _log_decision(self, plan, url: str, title: str | None, description: str | None, decision, prefix: str | None = None) -> None:
++        if not self._debug_rejections:
++            return
++        reason = f"{prefix}:{decision.reason}" if prefix else decision.reason
++        logger.info(
++            "candidate_decision",
++            source=self.name,
++            topic=plan.normalized_query,
++            topic_kind=plan.topic_kind,
++            status=decision.status.value,
++            reason=reason,
++            score=decision.score,
++            directness_score=decision.directness_score,
++            article_confidence=decision.article_confidence,
++            freshness_verified=decision.freshness_verified,
++            published_at_source=decision.published_at_source,
++            url=url,
++            title=title,
++        )
+ 
+     @staticmethod
+     def _extract_canonical_url(html: str) -> str | None:
+diff -ruN base/newsbot_v5_4_retrieval_reliability/app/search_v2/__init__.py work/newsbot_v6_universal_search_core/app/search_v2/__init__.py
+--- base/newsbot_v5_4_retrieval_reliability/app/search_v2/__init__.py	2026-04-25 18:07:22.000000000 +0000
++++ work/newsbot_v6_universal_search_core/app/search_v2/__init__.py	2026-04-26 13:38:36.445345011 +0000
+@@ -1,2 +1,3 @@
+-from .strategy import SearchPlan, build_search_plan, classify_topic
++from .strategy import SearchPlan, build_search_plan, classify_topic, canonicalize_topic
+ from .article_filter import extract_html_metadata, is_candidate_article, topic_match_score, article_confidence, candidate_quality, directness_score
++from .core import CandidateStatus, CandidateDecision, FreshnessPolicy, SearchDebugReport, evaluate_candidate
+diff -ruN base/newsbot_v5_4_retrieval_reliability/app/search_v2/article_filter.py work/newsbot_v6_universal_search_core/app/search_v2/article_filter.py
+--- base/newsbot_v5_4_retrieval_reliability/app/search_v2/article_filter.py	2026-04-26 10:20:06.000000000 +0000
++++ work/newsbot_v6_universal_search_core/app/search_v2/article_filter.py	2026-04-26 13:39:47.108153955 +0000
+@@ -238,7 +238,18 @@
+     if plan.topic_kind == "team_org":
+         if any(h in hay for h in _TEAM_GENERIC_DRIFT_HINTS):
+             return "generic_phrase_not_entity"
+-        if plan.exact_phrase and plan.exact_phrase not in hay and len(plan.required_terms) >= 2:
++        # v6: do not require the exact user phrase when it contains generic words
++        # like "team". Articles often say "NAVI" or "Natus Vincere" rather than
++        # "NAVI TEAM". Strong title/alternate/direct hits are enough.
++        if (
++            plan.exact_phrase
++            and plan.exact_phrase not in hay
++            and len(plan.required_terms) >= 2
++            and title_hits == 0
++            and desc_hits == 0
++            and alt_hits == 0
++            and semantic_hits == 0
++        ):
+             return "missing_team_phrase"
+ 
+     score = topic_match_score(plan, title=title, description=description, url=url)
+diff -ruN base/newsbot_v5_4_retrieval_reliability/app/search_v2/core.py work/newsbot_v6_universal_search_core/app/search_v2/core.py
+--- base/newsbot_v5_4_retrieval_reliability/app/search_v2/core.py	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/app/search_v2/core.py	2026-04-26 13:38:25.306306220 +0000
+@@ -0,0 +1,218 @@
++from __future__ import annotations
++
++from collections import Counter
++from dataclasses import dataclass, field
++from datetime import datetime, timedelta, timezone
++from enum import Enum
++from typing import Any
++from urllib.parse import urlparse
++
++from app.search_v2.article_filter import article_confidence, candidate_quality
++from app.search_v2.strategy import SearchPlan
++
++
++class CandidateStatus(str, Enum):
++    ACCEPTED = "accepted"
++    WEAK_BUT_USABLE = "weak_but_usable"
++    REJECTED = "rejected"
++    DUPLICATE = "duplicate"
++    OLD = "old"
++    HUB_PAGE = "hub_page"
++    WRONG_ENTITY = "wrong_entity"
++
++
++@dataclass(slots=True)
++class FreshnessPolicy:
++    soft_age_hours: int = 168
++    hard_age_hours: int = 720
++    followup_hard_age_hours: int = 72
++    future_skew_hours: int = 12
++    allow_weak_undated: bool = True
++    weak_min_directness: int = 12
++    weak_min_article_confidence: int = 0
++
++    def floor_for(self, *, to_dt: datetime, plan: SearchPlan) -> datetime:
++        hard_hours = self.hard_age_hours if plan.first_run else min(self.hard_age_hours, self.followup_hard_age_hours)
++        floor = to_dt - timedelta(hours=max(hard_hours, 1))
++        if floor.tzinfo is None:
++            floor = floor.replace(tzinfo=timezone.utc)
++        return floor.astimezone(timezone.utc)
++
++
++@dataclass(slots=True)
++class CandidateDecision:
++    status: CandidateStatus
++    reason: str
++    score: int
++    directness_score: int
++    article_confidence: int
++    freshness_verified: bool
++    published_at: datetime | None
++    published_at_source: str | None
++    metadata: dict[str, Any] = field(default_factory=dict)
++
++    @property
++    def usable(self) -> bool:
++        return self.status in {CandidateStatus.ACCEPTED, CandidateStatus.WEAK_BUT_USABLE}
++
++
++def _utc(dt: datetime | None) -> datetime | None:
++    if dt is None:
++        return None
++    if dt.tzinfo is None:
++        return dt.replace(tzinfo=timezone.utc)
++    return dt.astimezone(timezone.utc)
++
++
++def _freshness_bucket(*, published_at: datetime | None, to_dt: datetime, verified: bool, policy: FreshnessPolicy) -> str:
++    if published_at is None:
++        return "undated"
++    age_hours = max((to_dt - published_at).total_seconds() / 3600.0, 0.0)
++    if not verified:
++        return "weak_unverified"
++    if age_hours <= policy.soft_age_hours:
++        return "fresh"
++    if age_hours <= policy.hard_age_hours:
++        return "recent_but_not_latest"
++    return "old"
++
++
++def evaluate_candidate(
++    plan: SearchPlan,
++    *,
++    url: str,
++    title: str | None,
++    description: str | None,
++    published_at: datetime | None,
++    published_at_source: str | None,
++    to_dt: datetime,
++    policy: FreshnessPolicy,
++    search_annotation: bool = False,
++    search_snippet: bool = False,
++) -> CandidateDecision:
++    """Universal candidate decision layer for v6.
++
++    The old pipeline treated many checks as hard gates. v6 makes a balanced
++    decision: verified recent articles are accepted; direct search-snippet
++    articles without a verified date may be weak-but-usable; old/wrong/hub
++    content is rejected with explicit reasons.
++    """
++    published_at = _utc(published_at)
++    to_dt = _utc(to_dt) or datetime.now(tz=timezone.utc)
++    quality = candidate_quality(plan, url=url, title=title, description=description)
++    article_conf = article_confidence(url, title, description)
++    qreason = quality.reason
++
++    # Preserve hard safety gates from article_filter.
++    if qreason in {
++        "invalid_url",
++        "bad_title_hint",
++        "section_or_index_page",
++        "topic_news_hub_page",
++        "news_hub_page",
++        "shallow_non_article_url",
++        "non_article_media_or_live_page",
++        "evergreen_or_service_content",
++    }:
++        status = CandidateStatus.HUB_PAGE if "hub" in qreason or "section" in qreason or "shallow" in qreason else CandidateStatus.REJECTED
++        return CandidateDecision(status, qreason, quality.score, quality.directness_score, article_conf, False, published_at, published_at_source)
++
++    if qreason in {"wrong_entity_context", "generic_phrase_not_entity", "sports_drift_for_city", "finance_only_drift"}:
++        return CandidateDecision(CandidateStatus.WRONG_ENTITY, qreason, quality.score, quality.directness_score, article_conf, False, published_at, published_at_source)
++
++    verified = published_at_source in {"metadata", "url"}
++    future_ceiling = to_dt + timedelta(hours=policy.future_skew_hours)
++    if published_at is not None and published_at > future_ceiling:
++        return CandidateDecision(CandidateStatus.REJECTED, "future_publish_date", quality.score, quality.directness_score, article_conf, verified, published_at, published_at_source)
++
++    floor = policy.floor_for(to_dt=to_dt, plan=plan)
++    if published_at is not None and published_at < floor:
++        return CandidateDecision(CandidateStatus.OLD, "outside_hard_freshness_window", quality.score, quality.directness_score, article_conf, verified, published_at, published_at_source)
++
++    bucket = _freshness_bucket(published_at=published_at, to_dt=to_dt, verified=verified, policy=policy)
++
++    # Verified articles: do not throw away good 8-30 day candidates in broad/niche topics.
++    if verified and quality.accepted and article_conf >= 0:
++        return CandidateDecision(
++            CandidateStatus.ACCEPTED,
++            "accepted_verified" if bucket == "fresh" else "accepted_verified_recent_but_not_latest",
++            quality.score,
++            quality.directness_score,
++            article_conf,
++            True,
++            published_at,
++            published_at_source,
++            {"freshness_bucket": bucket},
++        )
++
++    # Direct search annotations without a verified date are usable, but capped later.
++    can_use_weak = (
++        policy.allow_weak_undated
++        and search_annotation
++        and search_snippet
++        and quality.directness_score >= policy.weak_min_directness
++        and article_conf >= policy.weak_min_article_confidence
++        and qreason not in {"semantic_only_match", "no_direct_topic_evidence", "topic_score_below_threshold", "low_directness"}
++    )
++    if published_at is None and can_use_weak:
++        return CandidateDecision(
++            CandidateStatus.WEAK_BUT_USABLE,
++            "accepted_search_snippet_weak_date",
++            quality.score,
++            quality.directness_score,
++            article_conf,
++            False,
++            to_dt,
++            "search_snippet",
++            {"freshness_bucket": "weak_unverified"},
++        )
++
++    if not quality.accepted:
++        return CandidateDecision(CandidateStatus.REJECTED, qreason or "quality_rejected", quality.score, quality.directness_score, article_conf, verified, published_at, published_at_source)
++    if published_at is None:
++        return CandidateDecision(CandidateStatus.REJECTED, "missing_publish_date_not_usable", quality.score, quality.directness_score, article_conf, False, None, published_at_source)
++    return CandidateDecision(CandidateStatus.REJECTED, "candidate_not_usable", quality.score, quality.directness_score, article_conf, verified, published_at, published_at_source)
++
++
++@dataclass(slots=True)
++class SearchDebugReport:
++    raw_count: int = 0
++    usable_count: int = 0
++    accepted_count: int = 0
++    weak_count: int = 0
++    rejected_count: int = 0
++    reason_counts: Counter[str] = field(default_factory=Counter)
++    pass_stats: list[dict[str, Any]] = field(default_factory=list)
++
++    def add_decision(self, decision: CandidateDecision) -> None:
++        if decision.usable:
++            self.usable_count += 1
++            if decision.status == CandidateStatus.ACCEPTED:
++                self.accepted_count += 1
++            elif decision.status == CandidateStatus.WEAK_BUT_USABLE:
++                self.weak_count += 1
++        else:
++            self.rejected_count += 1
++        self.reason_counts[decision.reason] += 1
++
++    def as_dict(self) -> dict[str, Any]:
++        return {
++            "raw_count": self.raw_count,
++            "usable_count": self.usable_count,
++            "accepted_count": self.accepted_count,
++            "weak_count": self.weak_count,
++            "rejected_count": self.rejected_count,
++            "reason_counts": dict(self.reason_counts.most_common()),
++            "pass_stats": self.pass_stats,
++        }
++
++
++def canonical_url_fingerprint(raw_url: str | None) -> str | None:
++    if not raw_url:
++        return None
++    parsed = urlparse(raw_url)
++    host = parsed.netloc.lower().replace("www.", "")
++    path = parsed.path.rstrip("/").lower()
++    if not host:
++        return None
++    return f"{host}{path}"
+diff -ruN base/newsbot_v5_4_retrieval_reliability/app/search_v2/strategy.py work/newsbot_v6_universal_search_core/app/search_v2/strategy.py
+--- base/newsbot_v5_4_retrieval_reliability/app/search_v2/strategy.py	2026-04-26 10:19:39.000000000 +0000
++++ work/newsbot_v6_universal_search_core/app/search_v2/strategy.py	2026-04-26 13:38:00.125998815 +0000
+@@ -41,6 +41,7 @@
+ _GEO_REGION_HINTS: Final = {"ocean", "sea", "river", "gulf", "canal", "strait", "island", "islands", "mountain", "mountains", "region", "basin"}
+ _COMPANY_SUFFIXES: Final = {"inc", "corp", "ltd", "plc", "ag", "sa", "group", "holdings", "company"}
+ _STOP: Final = {"the", "and", "for", "with", "latest", "news", "new", "about", "from", "city"}
++_GENERIC_TOPIC_SUFFIXES: Final = {"team", "club", "organization", "org", "official"}
+ 
+ 
+ _KNOWN_BRANDS: Final = {
+@@ -167,11 +168,30 @@
+     return re.sub(r"\s+", " ", "".join(chars)).strip()
+ 
+ 
++def _strip_generic_topic_words(q: str) -> str:
++    """Remove generic UI/user suffixes without hard-coding concrete topics.
++
++    Users often enter forms like "NAVI TEAM", "Rome city", or "OpenAI official".
++    Those generic words should help query planning, but they should not become
++    required entity tokens. Otherwise good articles are rejected because they say
++    "NAVI" or "Rome" but not the exact phrase "NAVI TEAM".
++    """
++    words = q.split()
++    if len(words) >= 2 and words[-1] in _GENERIC_TOPIC_SUFFIXES:
++        return " ".join(words[:-1]).strip() or q
++    if len(words) >= 2 and words[-1] == "city":
++        candidate = " ".join(words[:-1]).strip()
++        # Only strip city when the remaining phrase is a known city alias/canonical.
++        if candidate in _CITY_ALIASES or any(candidate in aliases for aliases in _CITY_ALIASES.values()):
++            return candidate
++    return q
++
++
+ def canonicalize_topic(query: str) -> str:
+-    q = _normalize(query)
++    q = _strip_generic_topic_words(_normalize(query))
+     if q in _TRANSLIT_ALIASES:
+         return _TRANSLIT_ALIASES[q]
+-    translit = transliterate_cyrillic(q)
++    translit = _strip_generic_topic_words(transliterate_cyrillic(q))
+     if translit and translit != q and translit in _TRANSLIT_ALIASES:
+         return _TRANSLIT_ALIASES[translit]
+     return translit if translit and translit != q else q
+diff -ruN base/newsbot_v5_4_retrieval_reliability/app/shared/settings.py work/newsbot_v6_universal_search_core/app/shared/settings.py
+--- base/newsbot_v5_4_retrieval_reliability/app/shared/settings.py	2026-04-26 09:33:05.000000000 +0000
++++ work/newsbot_v6_universal_search_core/app/shared/settings.py	2026-04-26 13:38:45.063831524 +0000
+@@ -29,7 +29,11 @@
+     openrouter_min_quality_candidates: int = 3
+     openrouter_allow_plugin_fallback: bool = False
+     openrouter_debug_rejections: bool = True
++    # v6: do not reject useful verified articles just because they are 8-30 days old.
++    # Soft age affects ranking; hard age is the maximum retrieval safety window.
+     openrouter_max_article_age_hours: int = 168
++    openrouter_verified_hard_max_article_age_hours: int = 720
++    openrouter_followup_hard_max_article_age_hours: int = 72
+     openrouter_require_verified_publish_date: bool = True
+     openrouter_allow_weak_publish_dates: bool = False
+     openrouter_allow_undated_fallback: bool = False
+diff -ruN base/newsbot_v5_4_retrieval_reliability/tests/test_quality_engine_v6.py work/newsbot_v6_universal_search_core/tests/test_quality_engine_v6.py
+--- base/newsbot_v5_4_retrieval_reliability/tests/test_quality_engine_v6.py	1970-01-01 00:00:00.000000000 +0000
++++ work/newsbot_v6_universal_search_core/tests/test_quality_engine_v6.py	2026-04-26 13:41:16.017213755 +0000
+@@ -0,0 +1,80 @@
++from __future__ import annotations
++
++from datetime import datetime, timedelta, timezone
++
++from app.search_v2.core import CandidateStatus, FreshnessPolicy, evaluate_candidate
++from app.search_v2.strategy import build_search_plan, canonicalize_topic
++from app.search_v2.article_filter import candidate_quality
++
++
++def _now() -> datetime:
++    return datetime(2026, 4, 26, 12, 0, tzinfo=timezone.utc)
++
++
++def test_generic_suffixes_do_not_become_required_entity_tokens() -> None:
++    assert canonicalize_topic("NAVI TEAM") == "navi"
++    assert canonicalize_topic("Rome city") == "rome"
++
++
++def test_team_articles_do_not_need_exact_user_phrase() -> None:
++    now = _now()
++    plan = build_search_plan("NAVI TEAM", from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++    quality = candidate_quality(
++        plan,
++        url="https://csgo.com/news/130041-navi-announce-updated-cs2-roster-jl-goes-inactive",
++        title="NAVI announce updated CS2 roster – jL goes inactive",
++        description="NAVI announce an updated CS2 roster before the tournament",
++    )
++    assert quality.accepted
++    assert quality.reason is None
++
++
++def test_direct_search_annotation_without_verified_date_can_be_weak_but_usable() -> None:
++    now = _now()
++    plan = build_search_plan("NAVI TEAM", from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++    decision = evaluate_candidate(
++        plan,
++        url="https://csgo.com/news/130041-navi-announce-updated-cs2-roster-jl-goes-inactive",
++        title="NAVI announce updated CS2 roster – jL goes inactive",
++        description="NAVI announce an updated CS2 roster before the tournament",
++        published_at=None,
++        published_at_source=None,
++        to_dt=now,
++        policy=FreshnessPolicy(),
++        search_annotation=True,
++        search_snippet=True,
++    )
++    assert decision.status == CandidateStatus.WEAK_BUT_USABLE
++
++
++def test_verified_article_just_outside_soft_window_is_accepted_not_zeroed() -> None:
++    now = _now()
++    plan = build_search_plan("bitcoin", from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++    decision = evaluate_candidate(
++        plan,
++        url="https://news.bitcoin.com/bitcoin-rebounds-but-cryptos-security-crisis-intensifies-week-in-review/",
++        title="Bitcoin Rebounds, But Crypto’s Security Crisis Intensifies – Week in Review",
++        description="Bitcoin rebounds as crypto security concerns intensify.",
++        published_at=now - timedelta(days=7, hours=1),
++        published_at_source="metadata",
++        to_dt=now,
++        policy=FreshnessPolicy(),
++    )
++    assert decision.status == CandidateStatus.ACCEPTED
++    assert decision.reason == "accepted_verified_recent_but_not_latest"
++
++
++def test_very_old_article_is_still_rejected() -> None:
++    now = _now()
++    plan = build_search_plan("bitcoin", from_dt=now - timedelta(days=7), to_dt=now, first_run=True)
++    decision = evaluate_candidate(
++        plan,
++        url="https://abcnews.com/Business/bitcoins-slide-investors-worried/story?id=119166107",
++        title="What's behind bitcoin's slide and should investors be worried?",
++        description="Investors are worried about bitcoin.",
++        published_at=now - timedelta(days=400),
++        published_at_source="metadata",
++        to_dt=now,
++        policy=FreshnessPolicy(),
++    )
++    assert decision.status == CandidateStatus.OLD

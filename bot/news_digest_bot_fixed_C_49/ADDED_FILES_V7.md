@@ -1,0 +1,9 @@
+app/search_v2/source_quality.py
+tests/test_quality_engine_v7.py
+START_HERE_V7_RU.md
+QUALITY_ENGINE_V7_BUDGET_LOCKED_RU.md
+TEST_REPORT_V7.md
+PATCH_V6_3_TO_V7.diff
+CHANGED_FILES_V7.md
+ADDED_FILES_V7.md
+REMOVED_FILES_V7.md

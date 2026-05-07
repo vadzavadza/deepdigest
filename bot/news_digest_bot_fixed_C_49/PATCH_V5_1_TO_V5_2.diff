@@ -1,0 +1,1106 @@
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/.env.example	2026-04-25 18:56:41.000000000 +0000
++++ .env.example	2026-04-26 08:55:11.709296414 +0000
+@@ -42,3 +42,11 @@
+ 
+ SCHEDULER_REFRESH_SECONDS=10
+ SCHEDULER_JOB_MISFIRE_GRACE_SECONDS=300
++
++# v5.2 quality/recall balance
++# Keeps verified publish dates as default, but allows at most one high-confidence
++# search-snippet fallback when strict freshness returns too little.
++OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_DIRECTNESS=12
++OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_CONFIDENCE=2
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/application/services/deduplication.py	2026-04-25 18:07:21.000000000 +0000
++++ app/application/services/deduplication.py	2026-04-26 08:55:44.135228293 +0000
+@@ -25,8 +25,18 @@
+     'tiktok.com',
+ )
+ 
+-_STOPWORDS = {"the","a","an","and","or","of","in","on","to","for","de","la","el","en","y","los","las","le","un","una","se","es","are","is","latest","news","update","updates","new"}
++_STOPWORDS = {
++    "the","a","an","and","or","of","in","on","to","for","de","la","el","en","y","los","las","le","un","una",
++    "se","es","are","is","latest","news","update","updates","new","today","breaking",
++    "в","у","і","й","та","на","з","за","до","про","як","що","це","від","для","над","під","при","із","зі",
++    "и","а","но","или","по","из","от","для","над","под","при","это","как","что","об",
++}
+ _MODEL_HINTS = {"bmw","series","i7","7","facelift","neue","klasse","cs2","patch","update","ukraine","war","usa","us","apple","iphone","ipad","mac"}
++_EVENT_TERMS = {
++    "match", "game", "beat", "beats", "defeat", "defeats", "win", "wins", "victory", "penalty", "league", "round",
++    "матч", "матчі", "переміг", "перемога", "пенальті", "ліга", "лізі", "тур", "чемпіонат",
++    "partido", "victoria", "derrota", "penalti", "penalty", "liga",
++}
+ 
+ 
+ def _url_fingerprint(raw_url: str | None) -> str | None:
+@@ -42,17 +52,30 @@
+ 
+ 
+ def _meaningful_tokens(text: str) -> set[str]:
+-    tokens = {token for token in re.findall(r"[a-z0-9áéíóúñüç]+", text.lower()) if len(token) >= 3}
++    tokens = {
++        token
++        for token in re.findall(r"[a-zA-Z0-9а-яА-ЯёЁіІїЇєЄґҐáéíóúñüç]+", text.lower())
++        if len(token) >= 3
++    }
+     return {token for token in tokens if token not in _STOPWORDS}
+ 
+ 
+ def _story_signature(title: str, description: str | None) -> set[str]:
+     tokens = _meaningful_tokens(title)
+     if description:
+-        tokens |= {t for t in _meaningful_tokens(description) if t in _MODEL_HINTS or len(t) >= 5}
++        tokens |= {t for t in _meaningful_tokens(description) if t in _MODEL_HINTS or t in _EVENT_TERMS or len(t) >= 5}
+     return tokens
+ 
+ 
++def _looks_like_same_event(sig_a: set[str], sig_b: set[str]) -> bool:
++    shared = sig_a & sig_b
++    if len(shared) >= 3 and (sig_a & _EVENT_TERMS or sig_b & _EVENT_TERMS):
++        return True
++    if len(shared) >= 2 and (sig_a & _EVENT_TERMS) and (sig_b & _EVENT_TERMS):
++        return True
++    return False
++
++
+ def _should_exclude_source(item: RawSourceItem) -> bool:
+     raw_url = str(item.url) if item.url is not None else ''
+     parsed = urlparse(raw_url)
+@@ -131,7 +154,7 @@
+             if score >= 84 and current_host and current_host in existing_hosts:
+                 matched_key = key
+                 break
+-            if sig_overlap >= 4:
++            if sig_overlap >= 4 or _looks_like_same_event(item_sig, ex_sig):
+                 matched_key = key
+                 break
+             exemplar_live_prefix = live_prefix(exemplar.title)
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/application/services/topic_processing.py	2026-04-25 18:07:22.000000000 +0000
++++ app/application/services/topic_processing.py	2026-04-26 08:55:19.373722927 +0000
+@@ -177,8 +177,21 @@
+             else:
+                 ordered_candidates = []
+ 
++            weak_freshness_sent = 0
++            max_weak_freshness = max(0, settings.openrouter_max_weak_freshness_items_per_digest)
++
+             for story, db_story in ordered_candidates[: max_items]:
+                 primary = select_primary_article(story.articles)
++                is_weak_freshness = primary.metadata.get("freshness_verified") is False
++                if is_weak_freshness and weak_freshness_sent >= max_weak_freshness:
++                    logger.info(
++                        "story_skipped_weak_freshness_cap",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                        published_at_source=primary.metadata.get("published_at_source"),
++                    )
++                    continue
+                 if primary.url is None or article_score(primary) < 0:
+                     logger.info(
+                         'story_skipped_without_url',
+@@ -194,6 +207,9 @@
+                     translation = await self._safe_translate(summary, topic.output_language)
+                     summary = translation.translated_text
+ 
++                if is_weak_freshness:
++                    weak_freshness_sent += 1
++
+                 payload_items.append(
+                     PublishStoryItem(
+                         title=story.canonical_title,
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/domain/policies/ranking.py	2026-04-25 18:07:22.000000000 +0000
++++ app/domain/policies/ranking.py	2026-04-26 08:55:30.732050564 +0000
+@@ -134,6 +134,17 @@
+     return max(0.0, 24.0 - min(delta_hours, 24.0))
+ 
+ 
++def freshness_confidence_penalty(article: NormalizedSourceItem) -> float:
++    source = str(article.metadata.get("published_at_source", ""))
++    if article.metadata.get("freshness_verified") is False:
++        if source == "search_snippet":
++            return -18.0
++        return -24.0
++    if source == "last_modified":
++        return -12.0
++    return 0.0
++
++
+ def url_quality_penalty(article: NormalizedSourceItem) -> float:
+     raw = str(article.url or "")
+     path = urlparse(raw).path.lower()
+@@ -155,6 +166,7 @@
+         + float(article.metadata.get("directness_score", 0)) * 1.8
+         + float(article.metadata.get("article_confidence", 0)) * 2.0
+         + url_quality_penalty(article)
++        + freshness_confidence_penalty(article)
+     )
+ 
+ 
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/infrastructure/sources/openrouter_web_search.py	2026-04-25 18:57:15.000000000 +0000
++++ app/infrastructure/sources/openrouter_web_search.py	2026-04-26 08:55:02.708067531 +0000
+@@ -44,6 +44,18 @@
+ )
+ 
+ 
++def _looks_like_news_hub_title(title: str | None, path: str) -> bool:
++    if not title:
++        return False
++    title_norm = re.sub(r"\s+", " ", title.lower()).strip()
++    left = re.split(r"\s*(?:\||-|–|—|:)\s*", title_norm, maxsplit=1)[0].strip()
++    words = re.findall(r"[a-z0-9]+", left)
++    if len(words) <= 6 and (left.endswith(" news") or left.endswith(" latest news") or left.startswith("latest ") and left.endswith(" news")):
++        return True
++    if path.rstrip("/") in {"", "/news", "/latest", "/latest-news", "/world", "/business", "/politics", "/markets", "/sport", "/sports", "/technology", "/tech"} and " news" in title_norm:
++        return True
++    return False
++
+ 
+ class OpenRouterWebSearchSource:
+     """Fetch candidate news links via OpenRouter web search.
+@@ -77,6 +89,9 @@
+         self._allow_weak_publish_dates = settings.openrouter_allow_weak_publish_dates
+         self._allow_undated_fallback = settings.openrouter_allow_undated_fallback
+         self._future_skew_hours = max(settings.openrouter_future_skew_hours, 0)
++        self._allow_search_snippet_fallback = settings.openrouter_allow_search_snippet_fallback
++        self._search_snippet_fallback_min_directness = max(settings.openrouter_search_snippet_fallback_min_directness, 1)
++        self._search_snippet_fallback_min_confidence = max(settings.openrouter_search_snippet_fallback_min_confidence, 0)
+ 
+     async def fetch(
+         self,
+@@ -92,6 +107,8 @@
+         queries = plan.query_variants[:max_calls]
+         merged: list[RawSourceItem] = []
+         seen_urls: set[str] = set()
++        rescue_pool: list[RawSourceItem] = []
++        rescue_seen: set[str] = set()
+ 
+         logger.info(
+             "source_fetch_plan",
+@@ -107,13 +124,24 @@
+ 
+         for current_query in queries:
+             payload = await self._call_server_tool(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call, broad_topic=plan.broad_topic)
+-            items = self._extract_items_from_payload(payload, results_per_call)
+-            items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
++            raw_items = self._extract_items_from_payload(payload, results_per_call)
++            self._append_unique_raw(rescue_pool, rescue_seen, raw_items)
++            items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=False)
+             self._merge_unique(merged, seen_urls, items, target_limit)
+             if len(merged) >= target_limit:
+                 logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+                 return merged
+ 
++        if len(merged) < min(self._min_quality_candidates, target_limit) and rescue_pool and self._allow_search_snippet_fallback:
++            rescue_items = await self._enrich_and_filter_recent(
++                rescue_pool,
++                from_dt=from_dt,
++                to_dt=to_dt,
++                plan=plan,
++                allow_search_snippet_fallback=True,
++            )
++            self._merge_unique(merged, seen_urls, rescue_items, target_limit)
++
+         if merged:
+             logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+             return merged
+@@ -121,8 +149,8 @@
+         if self._allow_plugin_fallback:
+             for current_query in queries:
+                 payload = await self._call_plugin_fallback(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call)
+-                items = self._extract_items_from_payload(payload, results_per_call)
+-                items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
++                raw_items = self._extract_items_from_payload(payload, results_per_call)
++                items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=self._allow_search_snippet_fallback)
+                 self._merge_unique(merged, seen_urls, items, target_limit)
+                 if len(merged) >= target_limit:
+                     logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_budgeted", count=len(merged))
+@@ -164,6 +192,15 @@
+             if len(target) >= limit:
+                 return
+ 
++    @staticmethod
++    def _append_unique_raw(target: list[RawSourceItem], seen_urls: set[str], incoming: list[RawSourceItem]) -> None:
++        for item in incoming:
++            raw_url = str(item.url) if item.url is not None else None
++            if raw_url is None or raw_url in seen_urls:
++                continue
++            seen_urls.add(raw_url)
++            target.append(item)
++
+     async def _call_server_tool(
+         self,
+         *,
+@@ -290,6 +327,7 @@
+                     source_name=source_name,
+                     source_language=None,
+                     published_at=None,
++                    metadata={"search_annotation": True, "search_snippet": bool(snippet)},
+                 )
+             )
+             if len(items) >= limit:
+@@ -331,6 +369,7 @@
+         from_dt: datetime,
+         to_dt: datetime,
+         plan,
++        allow_search_snippet_fallback: bool = False,
+     ) -> list[RawSourceItem]:
+         enriched: list[RawSourceItem] = []
+         freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+@@ -350,6 +389,7 @@
+                             to_dt=to_dt,
+                             plan=plan,
+                             reason=f"http_{response.status_code}",
++                            allow_search_snippet_fallback=allow_search_snippet_fallback,
+                         )
+                         if fallback is not None:
+                             enriched.append(fallback)
+@@ -361,6 +401,7 @@
+                         to_dt=to_dt,
+                         plan=plan,
+                         reason=type(exc).__name__,
++                        allow_search_snippet_fallback=allow_search_snippet_fallback,
+                     )
+                     if fallback is not None:
+                         enriched.append(fallback)
+@@ -377,6 +418,18 @@
+                     last_modified=response.headers.get("last-modified"),
+                 )
+                 if published_at is None:
++                    if allow_search_snippet_fallback:
++                        fallback = self._fallback_candidate(
++                            item.model_copy(update={"title": candidate_title, "description": candidate_desc}),
++                            from_dt=from_dt,
++                            to_dt=to_dt,
++                            plan=plan,
++                            reason="missing_verified_publish_date",
++                            allow_search_snippet_fallback=True,
++                        )
++                        if fallback is not None:
++                            enriched.append(fallback)
++                        continue
+                     self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "missing_verified_publish_date")
+                     continue
+                 if published_at.tzinfo is None:
+@@ -445,6 +498,7 @@
+         to_dt: datetime,
+         plan,
+         reason: str,
++        allow_search_snippet_fallback: bool = False,
+     ) -> RawSourceItem | None:
+         url = str(item.url) if item.url is not None else None
+         if not url:
+@@ -455,14 +509,25 @@
+ 
+         url_date = self._extract_date_from_url(url)
+         if url_date is None:
+-            if self._require_verified_publish_date and not self._allow_undated_fallback:
+-                self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
+-                return None
+-            if not self._allow_undated_fallback:
+-                self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
+-                return None
+-            published_at = to_dt
+-            published_source = "fallback_unverified"
++            can_use_search_snippet = (
++                allow_search_snippet_fallback
++                and bool(item.metadata.get("search_annotation"))
++                and bool(item.metadata.get("search_snippet"))
++                and bool((item.title or "").strip())
++                and bool((item.description or "").strip())
++            )
++            if not can_use_search_snippet:
++                if self._require_verified_publish_date and not self._allow_undated_fallback:
++                    self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
++                    return None
++                if not self._allow_undated_fallback:
++                    self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
++                    return None
++                published_at = to_dt
++                published_source = "fallback_unverified"
++            else:
++                published_at = to_dt
++                published_source = "search_snippet"
+         else:
+             published_at = url_date
+             published_source = "url"
+@@ -480,7 +545,10 @@
+             return None
+ 
+         quality = candidate_quality(plan, url=url, title=item.title, description=item.description)
+-        if not quality.accepted or quality.directness_score < plan.minimum_directness + 2:
++        article_conf = article_confidence(url, item.title, item.description)
++        required_directness = self._search_snippet_fallback_min_directness if published_source == "search_snippet" else plan.minimum_directness + 2
++        required_confidence = self._search_snippet_fallback_min_confidence if published_source == "search_snippet" else 1
++        if not quality.accepted or quality.directness_score < required_directness or article_conf < required_confidence:
+             self._log_rejection(plan, url, item.title, item.description, quality.reason or f"fallback_rejected:{reason}")
+             return None
+         return item.model_copy(update={
+@@ -490,11 +558,11 @@
+                 "canonical_url": url,
+                 "topic_match_score": quality.score,
+                 "directness_score": quality.directness_score,
+-                "article_confidence": article_confidence(url, item.title, item.description),
++                "article_confidence": article_conf,
+                 "metadata_fallback": True,
+                 "metadata_fallback_reason": reason,
+                 "published_at_source": published_source,
+-                "freshness_verified": published_source == "url",
++                "freshness_verified": published_source in {"url", "metadata"},
+                 "freshness_floor": freshness_floor.isoformat(),
+             },
+         })
+@@ -648,6 +716,8 @@
+             return False
+         if any(marker in title_norm for marker in _TITLE_BLOCK_HINTS):
+             return False
++        if _looks_like_news_hub_title(title, path):
++            return False
+         if ('latest news' in title_norm or 'news today' in title_norm or 'headlines' in title_norm) and path.rstrip('/') in {'/news','/latest','/latest-news','/world','/business','/politics','/markets','/sport','/sports'}:
+             return False
+         if host.endswith('.org') and not any(marker in path for marker in ('/news', '/article', '/articles', '/stories', '/story', '/press', '/press-release')):
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/search_v2/article_filter.py	2026-04-25 18:07:22.000000000 +0000
++++ app/search_v2/article_filter.py	2026-04-26 08:59:39.525296047 +0000
+@@ -165,6 +165,24 @@
+     return any(n in haystack for n in needles)
+ 
+ 
++def _looks_like_topic_news_hub(plan: SearchPlan, *, title: str | None, url: str) -> bool:
++    if not title:
++        return False
++    parsed = urlparse(url)
++    path = parsed.path.lower().rstrip("/")
++    title_norm = re.sub(r"\s+", " ", title.lower()).strip()
++    q = re.escape(plan.normalized_query.lower())
++    # Examples: "Microsoft News | Windows Central", "Bitcoin News Today", "Trump latest news".
++    if re.match(rf"^{q}\s+(latest\s+)?news(\s*(today|and|&|\||-|–|—|:)|$)", title_norm):
++        return True
++    if re.match(rf"^latest\s+{q}\s+news(\s*(today|and|&|\||-|–|—|:)|$)", title_norm):
++        return True
++    short_hub_paths = {"", "/news", "/latest", "/latest-news", "/world", "/business", "/politics", "/markets", "/sport", "/sports", "/technology", "/tech"}
++    if path in short_hub_paths and " news" in title_norm and plan.normalized_query.lower() in title_norm:
++        return True
++    return False
++
++
+ def rejection_reason(plan: SearchPlan, *, url: str, title: str | None, description: str | None) -> str | None:
+     parsed = urlparse(url)
+     path = parsed.path.lower().rstrip("/")
+@@ -179,6 +197,8 @@
+         return "section_or_index_page"
+     if any(h in title_norm for h in _BAD_TITLE_HINTS):
+         return "bad_title_hint"
++    if _looks_like_topic_news_hub(plan, title=title, url=url):
++        return "topic_news_hub_page"
+     if any(seg in path for seg in ("/live/", "/live-blog", "/liveblog", "/video/", "/videos/", "/watch", "/podcast", "/audio/", "/gallery/")):
+         return "non_article_media_or_live_page"
+     shallow = path.count("/") < 2 or path in {"/news", "/latest-news", "/latest", "/world", "/sport", "/sports", "/politics", "/business", "/markets"}
+@@ -203,7 +223,7 @@
+     positive_context_hits = int(features["positive_context_hits"])
+     negative_context_hits = int(features["negative_context_hits"])
+ 
+-    if negative_context_hits > 0 and positive_context_hits == 0 and title_hits == 0:
++    if negative_context_hits > 0 and positive_context_hits == 0 and semantic_hits == 0:
+         return "wrong_entity_context"
+ 
+     if plan.strict_phrase and not (bool(features["exact_phrase"]) or title_hits > 0 or desc_hits > 0 or alt_hits > 0):
+@@ -228,7 +248,7 @@
+         threshold = 3 if plan.first_run else 5
+     if score < threshold:
+         return "topic_score_below_threshold"
+-    if plan.topic_kind in {"country", "city", "geo_region", "person", "business", "crypto"} and title_hits == 0 and semantic_hits == 0:
++    if plan.topic_kind in {"country", "city", "geo_region", "person", "business", "crypto", "technology"} and title_hits == 0 and semantic_hits == 0:
+         return "indirect_relevance"
+     if direct < plan.minimum_directness:
+         return "low_directness"
+@@ -280,6 +300,8 @@
+         score += 1
+     if 'latest news' in title_norm or 'news today' in title_norm or 'headlines' in title_norm:
+         score -= 4
++    if title_norm.endswith(" news") or " news |" in title_norm or " news -" in title_norm:
++        score -= 5
+     if any(h in f"{title_norm} {desc_norm} {path}" for h in _EVERGREEN_HINTS):
+         score -= 4
+     return score
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/infrastructure/sources/openrouter_web_search.py	2026-04-25 18:57:15.000000000 +0000
++++ app/infrastructure/sources/openrouter_web_search.py	2026-04-26 08:55:02.708067531 +0000
+@@ -44,6 +44,18 @@
+ )
+ 
+ 
++def _looks_like_news_hub_title(title: str | None, path: str) -> bool:
++    if not title:
++        return False
++    title_norm = re.sub(r"\s+", " ", title.lower()).strip()
++    left = re.split(r"\s*(?:\||-|–|—|:)\s*", title_norm, maxsplit=1)[0].strip()
++    words = re.findall(r"[a-z0-9]+", left)
++    if len(words) <= 6 and (left.endswith(" news") or left.endswith(" latest news") or left.startswith("latest ") and left.endswith(" news")):
++        return True
++    if path.rstrip("/") in {"", "/news", "/latest", "/latest-news", "/world", "/business", "/politics", "/markets", "/sport", "/sports", "/technology", "/tech"} and " news" in title_norm:
++        return True
++    return False
++
+ 
+ class OpenRouterWebSearchSource:
+     """Fetch candidate news links via OpenRouter web search.
+@@ -77,6 +89,9 @@
+         self._allow_weak_publish_dates = settings.openrouter_allow_weak_publish_dates
+         self._allow_undated_fallback = settings.openrouter_allow_undated_fallback
+         self._future_skew_hours = max(settings.openrouter_future_skew_hours, 0)
++        self._allow_search_snippet_fallback = settings.openrouter_allow_search_snippet_fallback
++        self._search_snippet_fallback_min_directness = max(settings.openrouter_search_snippet_fallback_min_directness, 1)
++        self._search_snippet_fallback_min_confidence = max(settings.openrouter_search_snippet_fallback_min_confidence, 0)
+ 
+     async def fetch(
+         self,
+@@ -92,6 +107,8 @@
+         queries = plan.query_variants[:max_calls]
+         merged: list[RawSourceItem] = []
+         seen_urls: set[str] = set()
++        rescue_pool: list[RawSourceItem] = []
++        rescue_seen: set[str] = set()
+ 
+         logger.info(
+             "source_fetch_plan",
+@@ -107,13 +124,24 @@
+ 
+         for current_query in queries:
+             payload = await self._call_server_tool(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call, broad_topic=plan.broad_topic)
+-            items = self._extract_items_from_payload(payload, results_per_call)
+-            items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
++            raw_items = self._extract_items_from_payload(payload, results_per_call)
++            self._append_unique_raw(rescue_pool, rescue_seen, raw_items)
++            items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=False)
+             self._merge_unique(merged, seen_urls, items, target_limit)
+             if len(merged) >= target_limit:
+                 logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+                 return merged
+ 
++        if len(merged) < min(self._min_quality_candidates, target_limit) and rescue_pool and self._allow_search_snippet_fallback:
++            rescue_items = await self._enrich_and_filter_recent(
++                rescue_pool,
++                from_dt=from_dt,
++                to_dt=to_dt,
++                plan=plan,
++                allow_search_snippet_fallback=True,
++            )
++            self._merge_unique(merged, seen_urls, rescue_items, target_limit)
++
+         if merged:
+             logger.info("source_fetch_success", source=self.name, strategy="server_tool_budgeted", count=len(merged))
+             return merged
+@@ -121,8 +149,8 @@
+         if self._allow_plugin_fallback:
+             for current_query in queries:
+                 payload = await self._call_plugin_fallback(query=current_query, from_dt=from_dt, to_dt=to_dt, limit=results_per_call)
+-                items = self._extract_items_from_payload(payload, results_per_call)
+-                items = await self._enrich_and_filter_recent(items, from_dt=from_dt, to_dt=to_dt, plan=plan)
++                raw_items = self._extract_items_from_payload(payload, results_per_call)
++                items = await self._enrich_and_filter_recent(raw_items, from_dt=from_dt, to_dt=to_dt, plan=plan, allow_search_snippet_fallback=self._allow_search_snippet_fallback)
+                 self._merge_unique(merged, seen_urls, items, target_limit)
+                 if len(merged) >= target_limit:
+                     logger.info("source_fetch_success", source=self.name, strategy="plugin_fallback_budgeted", count=len(merged))
+@@ -164,6 +192,15 @@
+             if len(target) >= limit:
+                 return
+ 
++    @staticmethod
++    def _append_unique_raw(target: list[RawSourceItem], seen_urls: set[str], incoming: list[RawSourceItem]) -> None:
++        for item in incoming:
++            raw_url = str(item.url) if item.url is not None else None
++            if raw_url is None or raw_url in seen_urls:
++                continue
++            seen_urls.add(raw_url)
++            target.append(item)
++
+     async def _call_server_tool(
+         self,
+         *,
+@@ -290,6 +327,7 @@
+                     source_name=source_name,
+                     source_language=None,
+                     published_at=None,
++                    metadata={"search_annotation": True, "search_snippet": bool(snippet)},
+                 )
+             )
+             if len(items) >= limit:
+@@ -331,6 +369,7 @@
+         from_dt: datetime,
+         to_dt: datetime,
+         plan,
++        allow_search_snippet_fallback: bool = False,
+     ) -> list[RawSourceItem]:
+         enriched: list[RawSourceItem] = []
+         freshness_floor = self._freshness_floor(from_dt=from_dt, to_dt=to_dt, plan=plan)
+@@ -350,6 +389,7 @@
+                             to_dt=to_dt,
+                             plan=plan,
+                             reason=f"http_{response.status_code}",
++                            allow_search_snippet_fallback=allow_search_snippet_fallback,
+                         )
+                         if fallback is not None:
+                             enriched.append(fallback)
+@@ -361,6 +401,7 @@
+                         to_dt=to_dt,
+                         plan=plan,
+                         reason=type(exc).__name__,
++                        allow_search_snippet_fallback=allow_search_snippet_fallback,
+                     )
+                     if fallback is not None:
+                         enriched.append(fallback)
+@@ -377,6 +418,18 @@
+                     last_modified=response.headers.get("last-modified"),
+                 )
+                 if published_at is None:
++                    if allow_search_snippet_fallback:
++                        fallback = self._fallback_candidate(
++                            item.model_copy(update={"title": candidate_title, "description": candidate_desc}),
++                            from_dt=from_dt,
++                            to_dt=to_dt,
++                            plan=plan,
++                            reason="missing_verified_publish_date",
++                            allow_search_snippet_fallback=True,
++                        )
++                        if fallback is not None:
++                            enriched.append(fallback)
++                        continue
+                     self._log_rejection(plan, canonical_url, candidate_title, candidate_desc, "missing_verified_publish_date")
+                     continue
+                 if published_at.tzinfo is None:
+@@ -445,6 +498,7 @@
+         to_dt: datetime,
+         plan,
+         reason: str,
++        allow_search_snippet_fallback: bool = False,
+     ) -> RawSourceItem | None:
+         url = str(item.url) if item.url is not None else None
+         if not url:
+@@ -455,14 +509,25 @@
+ 
+         url_date = self._extract_date_from_url(url)
+         if url_date is None:
+-            if self._require_verified_publish_date and not self._allow_undated_fallback:
+-                self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
+-                return None
+-            if not self._allow_undated_fallback:
+-                self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
+-                return None
+-            published_at = to_dt
+-            published_source = "fallback_unverified"
++            can_use_search_snippet = (
++                allow_search_snippet_fallback
++                and bool(item.metadata.get("search_annotation"))
++                and bool(item.metadata.get("search_snippet"))
++                and bool((item.title or "").strip())
++                and bool((item.description or "").strip())
++            )
++            if not can_use_search_snippet:
++                if self._require_verified_publish_date and not self._allow_undated_fallback:
++                    self._log_rejection(plan, url, item.title, item.description, f"fallback_missing_verified_date:{reason}")
++                    return None
++                if not self._allow_undated_fallback:
++                    self._log_rejection(plan, url, item.title, item.description, f"fallback_undated_disabled:{reason}")
++                    return None
++                published_at = to_dt
++                published_source = "fallback_unverified"
++            else:
++                published_at = to_dt
++                published_source = "search_snippet"
+         else:
+             published_at = url_date
+             published_source = "url"
+@@ -480,7 +545,10 @@
+             return None
+ 
+         quality = candidate_quality(plan, url=url, title=item.title, description=item.description)
+-        if not quality.accepted or quality.directness_score < plan.minimum_directness + 2:
++        article_conf = article_confidence(url, item.title, item.description)
++        required_directness = self._search_snippet_fallback_min_directness if published_source == "search_snippet" else plan.minimum_directness + 2
++        required_confidence = self._search_snippet_fallback_min_confidence if published_source == "search_snippet" else 1
++        if not quality.accepted or quality.directness_score < required_directness or article_conf < required_confidence:
+             self._log_rejection(plan, url, item.title, item.description, quality.reason or f"fallback_rejected:{reason}")
+             return None
+         return item.model_copy(update={
+@@ -490,11 +558,11 @@
+                 "canonical_url": url,
+                 "topic_match_score": quality.score,
+                 "directness_score": quality.directness_score,
+-                "article_confidence": article_confidence(url, item.title, item.description),
++                "article_confidence": article_conf,
+                 "metadata_fallback": True,
+                 "metadata_fallback_reason": reason,
+                 "published_at_source": published_source,
+-                "freshness_verified": published_source == "url",
++                "freshness_verified": published_source in {"url", "metadata"},
+                 "freshness_floor": freshness_floor.isoformat(),
+             },
+         })
+@@ -648,6 +716,8 @@
+             return False
+         if any(marker in title_norm for marker in _TITLE_BLOCK_HINTS):
+             return False
++        if _looks_like_news_hub_title(title, path):
++            return False
+         if ('latest news' in title_norm or 'news today' in title_norm or 'headlines' in title_norm) and path.rstrip('/') in {'/news','/latest','/latest-news','/world','/business','/politics','/markets','/sport','/sports'}:
+             return False
+         if host.endswith('.org') and not any(marker in path for marker in ('/news', '/article', '/articles', '/stories', '/story', '/press', '/press-release')):
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/search_v2/strategy.py	2026-04-25 18:57:30.000000000 +0000
++++ app/search_v2/strategy.py	2026-04-26 08:53:28.448832398 +0000
+@@ -31,7 +31,9 @@
+ _UPDATE_HINTS: Final = {"update", "updates", "patch", "patches", "patch notes", "changelog", "release notes", "official update"}
+ _CONFLICT_HINTS: Final = {"war", "conflict", "invasion", "ceasefire", "frontline", "military", "strike", "aid"}
+ _SPORT_HINTS: Final = {"fc", "club", "transfer", "injury", "league", "match", "coach", "goal", "nba", "nfl", "mlb", "nhl", "epl"}
+-_ESPORTS_HINTS: Final = {"esports", "roster", "tournament", "major", "valve", "steam", "dota", "cs2", "counter-strike", "counter strike", "hltv", "bo3", "qualifier"}
++_ESPORTS_HINTS: Final = {"esports", "roster", "tournament", "major", "valve", "steam", "dota", "cs2", "counter-strike", "counter strike", "hltv", "bo3", "qualifier", "valorant", "blast", "iem", "esl"}
++_ESPORTS_ACRONYM_RE: Final = re.compile(r"\b(cs|cs2|dota|valorant|lol|rlcs)\b", re.IGNORECASE)
++_TECH_SOFTWARE_HINTS: Final = {"python", "java", "javascript", "typescript", "rust", "golang", "go", "php", "ruby", "kotlin", "swift", "scala", "perl", "linux", "docker", "kubernetes", "nodejs", "react", "django", "pytorch", "tensorflow", "postgresql", "mysql"}
+ _TEAM_ENTITY_MARKERS: Final = {"team", "squad", "roster", "club", "org", "organization"}
+ _BUSINESS_HINTS: Final = {"earnings", "shares", "stock", "market", "results", "guidance", "investor", "ceo", "merger", "acquisition"}
+ _CRYPTO_HINTS: Final = {"bitcoin", "ethereum", "solana", "crypto", "cryptocurrency", "blockchain", "token", "defi", "etf"}
+@@ -119,6 +121,25 @@
+     return capitalized >= 1 or len(words) == 2
+ 
+ 
++def _looks_like_software_tech(q: str) -> bool:
++    q_tokens = _tokens(q)
++    if q in _TECH_SOFTWARE_HINTS:
++        return True
++    if q_tokens & (_TECH_SOFTWARE_HINTS - {"go"}):
++        return True
++    if any(marker in q for marker in ("programming language", "software release", "developer", "github", "pypi")):
++        return True
++    return False
++
++
++def _looks_like_esports_query(raw_query: str, q: str) -> bool:
++    if any(h in q for h in _ESPORTS_HINTS):
++        return True
++    if _ESPORTS_ACRONYM_RE.search(raw_query):
++        return True
++    return False
++
++
+ def classify_topic(query: str) -> str:
+     q = canonicalize_topic(query)
+     token_count = len(_tokens(q))
+@@ -128,7 +149,9 @@
+         return "game_updates"
+     if q in _KNOWN_CRYPTO or any(h in q for h in _CRYPTO_HINTS):
+         return "crypto"
+-    if any(h in q for h in _ESPORTS_HINTS):
++    if _looks_like_software_tech(q):
++        return "technology"
++    if _looks_like_esports_query(query, q):
+         return "esports"
+     if any(h in q for h in _CONFLICT_HINTS):
+         return "conflict"
+@@ -197,6 +220,8 @@
+         hints |= {"politics", "economy", "government", "security", "official", "development"}
+     elif kind == "crypto":
+         hints |= {"crypto", "blockchain", "market", "etf", "regulation", "exchange", "protocol"}
++    elif kind == "technology":
++        hints |= {"software", "release", "security", "developer", "programming", "package", "open source", "github"}
+     elif kind == "business":
+         hints |= {"earnings", "company", "launch", "product", "shares", "regulation", "deal"}
+     elif kind == "person":
+@@ -209,6 +234,11 @@
+ def _alternate_terms(q: str) -> set[str]:
+     if q in _CITY_ALIASES:
+         return set(_CITY_ALIASES[q])
++    if q in _TECH_SOFTWARE_HINTS:
++        terms = {q, f"{q} programming language", f"{q} software"}
++        if q == "python":
++            terms |= {"python programming", "python software", "python release", "pypi"}
++        return terms
+     return {q}
+ 
+ 
+@@ -220,6 +250,10 @@
+         if context:
+             positive |= context.get("positive", set())
+             negative |= context.get("negative", set())
++    if kind == "technology":
++        positive |= {"software", "programming", "developer", "release", "security", "open source", "github", "package"}
++        if q == "python":
++            negative |= {"snake", "zoo", "reptile", "burmese python", "reticulated python"}
+     ambiguous = _AMBIGUOUS_ENTITY_HINTS.get(q)
+     if ambiguous:
+         for hints in ambiguous.values():
+@@ -228,7 +262,7 @@
+ 
+ 
+ def _minimum_directness(kind: str, first_run: bool, required_terms: set[str]) -> int:
+-    if kind in {"city", "country", "geo_region", "person", "business", "crypto"}:
++    if kind in {"city", "country", "geo_region", "person", "business", "crypto", "technology"}:
+         return 7 if not first_run else 5
+     if kind in {"team_org", "entity_symbol"}:
+         return 8 if not first_run else 6
+@@ -240,7 +274,7 @@
+ def build_search_plan(query: str, *, from_dt: datetime, to_dt: datetime, first_run: bool) -> SearchPlan:
+     q = canonicalize_topic(query)
+     kind = classify_topic(query)
+-    broad = kind in {"broad_single", "broad_dual", "general_news", "entity_symbol", "country", "city", "geo_region", "person", "business", "crypto"}
++    broad = kind in {"broad_single", "broad_dual", "general_news", "entity_symbol", "country", "city", "geo_region", "person", "business", "crypto", "technology"}
+     freshness = _freshness_hint(from_dt, to_dt, first_run)
+     required = _tokens(q)
+     soft = set(required)
+@@ -264,8 +298,8 @@
+         variants.extend([f'{quoted} match transfer injury news {freshness}', f'{quoted} official club latest {freshness}'])
+         soft |= {"match", "transfer", "injury", "club"}
+     elif kind == "esports":
+-        variants.extend([f'{quoted} esports roster tournament latest {freshness}', f'{quoted} competitive match announcement {freshness}', f'{quoted} official team update {freshness}'])
+-        soft |= {"esports", "tournament", "roster", "team", "match", "announcement"}
++        variants.extend([f'{quoted} esports roster tournament latest {freshness}', f'{quoted} competitive match announcement {freshness}', f'{quoted} official team update {freshness}', f'{quoted} CS2 Counter-Strike tournament latest {freshness}'])
++        soft |= {"esports", "tournament", "roster", "team", "match", "announcement", "cs2", "counter-strike"}
+     elif kind == "team_org":
+         variants.extend([f'{quoted} official team organization latest {freshness}', f'{quoted} roster announcement match latest {freshness}', f'{quoted} team news latest {freshness}'])
+         soft |= {"official", "team", "organization", "roster", "announcement"}
+@@ -283,6 +317,9 @@
+     elif kind == "crypto":
+         variants.extend([f'{quoted} crypto market regulation latest {freshness}', f'{quoted} blockchain protocol exchange latest {freshness}', f'{quoted} Reuters Bloomberg CoinDesk latest {freshness}'])
+         soft |= {"crypto", "blockchain", "market", "regulation", "exchange", "protocol"}
++    elif kind == "technology":
++        variants.extend([f'{quoted} software release security latest {freshness}', f'{quoted} developer ecosystem package latest {freshness}', f'{quoted} programming language open source latest {freshness}'])
++        soft |= {"software", "release", "security", "developer", "programming", "package", "open", "source"}
+     elif kind == "business":
+         variants.extend([f'{quoted} company earnings product launch latest {freshness}', f'{quoted} regulation deal market latest {freshness}', f'{quoted} Reuters Bloomberg CNBC latest {freshness}'])
+         soft |= {"company", "earnings", "product", "launch", "shares", "deal"}
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/shared/settings.py	2026-04-25 18:56:41.000000000 +0000
++++ app/shared/settings.py	2026-04-26 08:55:11.627375019 +0000
+@@ -34,6 +34,12 @@
+     openrouter_allow_weak_publish_dates: bool = False
+     openrouter_allow_undated_fallback: bool = False
+     openrouter_future_skew_hours: int = 12
++    # Rescue mode: if strict verified-date filtering returns too little, allow high-confidence
++    # OpenRouter search annotations as weak-freshness candidates. These are penalized and capped.
++    openrouter_allow_search_snippet_fallback: bool = True
++    openrouter_search_snippet_fallback_min_directness: int = 12
++    openrouter_search_snippet_fallback_min_confidence: int = 2
++    openrouter_max_weak_freshness_items_per_digest: int = 1
+ 
+     enable_openrouter_web_search_source: bool = True
+     enable_mock_source: bool = False
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/application/services/deduplication.py	2026-04-25 18:07:21.000000000 +0000
++++ app/application/services/deduplication.py	2026-04-26 08:55:44.135228293 +0000
+@@ -25,8 +25,18 @@
+     'tiktok.com',
+ )
+ 
+-_STOPWORDS = {"the","a","an","and","or","of","in","on","to","for","de","la","el","en","y","los","las","le","un","una","se","es","are","is","latest","news","update","updates","new"}
++_STOPWORDS = {
++    "the","a","an","and","or","of","in","on","to","for","de","la","el","en","y","los","las","le","un","una",
++    "se","es","are","is","latest","news","update","updates","new","today","breaking",
++    "в","у","і","й","та","на","з","за","до","про","як","що","це","від","для","над","під","при","із","зі",
++    "и","а","но","или","по","из","от","для","над","под","при","это","как","что","об",
++}
+ _MODEL_HINTS = {"bmw","series","i7","7","facelift","neue","klasse","cs2","patch","update","ukraine","war","usa","us","apple","iphone","ipad","mac"}
++_EVENT_TERMS = {
++    "match", "game", "beat", "beats", "defeat", "defeats", "win", "wins", "victory", "penalty", "league", "round",
++    "матч", "матчі", "переміг", "перемога", "пенальті", "ліга", "лізі", "тур", "чемпіонат",
++    "partido", "victoria", "derrota", "penalti", "penalty", "liga",
++}
+ 
+ 
+ def _url_fingerprint(raw_url: str | None) -> str | None:
+@@ -42,17 +52,30 @@
+ 
+ 
+ def _meaningful_tokens(text: str) -> set[str]:
+-    tokens = {token for token in re.findall(r"[a-z0-9áéíóúñüç]+", text.lower()) if len(token) >= 3}
++    tokens = {
++        token
++        for token in re.findall(r"[a-zA-Z0-9а-яА-ЯёЁіІїЇєЄґҐáéíóúñüç]+", text.lower())
++        if len(token) >= 3
++    }
+     return {token for token in tokens if token not in _STOPWORDS}
+ 
+ 
+ def _story_signature(title: str, description: str | None) -> set[str]:
+     tokens = _meaningful_tokens(title)
+     if description:
+-        tokens |= {t for t in _meaningful_tokens(description) if t in _MODEL_HINTS or len(t) >= 5}
++        tokens |= {t for t in _meaningful_tokens(description) if t in _MODEL_HINTS or t in _EVENT_TERMS or len(t) >= 5}
+     return tokens
+ 
+ 
++def _looks_like_same_event(sig_a: set[str], sig_b: set[str]) -> bool:
++    shared = sig_a & sig_b
++    if len(shared) >= 3 and (sig_a & _EVENT_TERMS or sig_b & _EVENT_TERMS):
++        return True
++    if len(shared) >= 2 and (sig_a & _EVENT_TERMS) and (sig_b & _EVENT_TERMS):
++        return True
++    return False
++
++
+ def _should_exclude_source(item: RawSourceItem) -> bool:
+     raw_url = str(item.url) if item.url is not None else ''
+     parsed = urlparse(raw_url)
+@@ -131,7 +154,7 @@
+             if score >= 84 and current_host and current_host in existing_hosts:
+                 matched_key = key
+                 break
+-            if sig_overlap >= 4:
++            if sig_overlap >= 4 or _looks_like_same_event(item_sig, ex_sig):
+                 matched_key = key
+                 break
+             exemplar_live_prefix = live_prefix(exemplar.title)
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/application/services/topic_processing.py	2026-04-25 18:07:22.000000000 +0000
++++ app/application/services/topic_processing.py	2026-04-26 08:55:19.373722927 +0000
+@@ -177,8 +177,21 @@
+             else:
+                 ordered_candidates = []
+ 
++            weak_freshness_sent = 0
++            max_weak_freshness = max(0, settings.openrouter_max_weak_freshness_items_per_digest)
++
+             for story, db_story in ordered_candidates[: max_items]:
+                 primary = select_primary_article(story.articles)
++                is_weak_freshness = primary.metadata.get("freshness_verified") is False
++                if is_weak_freshness and weak_freshness_sent >= max_weak_freshness:
++                    logger.info(
++                        "story_skipped_weak_freshness_cap",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                        published_at_source=primary.metadata.get("published_at_source"),
++                    )
++                    continue
+                 if primary.url is None or article_score(primary) < 0:
+                     logger.info(
+                         'story_skipped_without_url',
+@@ -194,6 +207,9 @@
+                     translation = await self._safe_translate(summary, topic.output_language)
+                     summary = translation.translated_text
+ 
++                if is_weak_freshness:
++                    weak_freshness_sent += 1
++
+                 payload_items.append(
+                     PublishStoryItem(
+                         title=story.canonical_title,
+--- /mnt/data/v51work/newsbot_v5_1_freshness_guard/app/domain/policies/ranking.py	2026-04-25 18:07:22.000000000 +0000
++++ app/domain/policies/ranking.py	2026-04-26 08:55:30.732050564 +0000
+@@ -134,6 +134,17 @@
+     return max(0.0, 24.0 - min(delta_hours, 24.0))
+ 
+ 
++def freshness_confidence_penalty(article: NormalizedSourceItem) -> float:
++    source = str(article.metadata.get("published_at_source", ""))
++    if article.metadata.get("freshness_verified") is False:
++        if source == "search_snippet":
++            return -18.0
++        return -24.0
++    if source == "last_modified":
++        return -12.0
++    return 0.0
++
++
+ def url_quality_penalty(article: NormalizedSourceItem) -> float:
+     raw = str(article.url or "")
+     path = urlparse(raw).path.lower()
+@@ -155,6 +166,7 @@
+         + float(article.metadata.get("directness_score", 0)) * 1.8
+         + float(article.metadata.get("article_confidence", 0)) * 2.0
+         + url_quality_penalty(article)
++        + freshness_confidence_penalty(article)
+     )
+ 
+ 
+
+--- /dev/null
++++ tests/test_quality_engine_v52.py
++from __future__ import annotations
++
++from datetime import datetime, timezone
++
++from app.application.services.deduplication import group_into_stories, normalize_articles
++from app.infrastructure.sources.openrouter_web_search import OpenRouterWebSearchSource
++from app.schemas.articles import RawArticle
++from app.schemas.sources import RawSourceItem
++from app.search_v2.article_filter import is_candidate_article
++from app.search_v2.strategy import build_search_plan, classify_topic
++
++
++def test_cyrillic_sports_match_reports_are_grouped() -> None:
++    now = datetime.now(tz=timezone.utc)
++    articles = [
++        RawArticle(
++            provider="a",
++            url="https://example.com/2026/04/23/shakhtar-zorya-1",
++            title="Чемпіонат України. Шахтар завдяки пенальті переміг Зорю",
++            description="Shakhtar won 2-1 against Zorya thanks to a penalty in the Ukrainian Championship.",
++            source_name="Dynamo.kiev.ua",
++            source_language="uk",
++            published_at=now,
++        ),
++        RawArticle(
++            provider="b",
++            url="https://example.net/2026/04/23/shakhtar-zorya-2",
++            title="Шахтар дотиснув Зорю і зміцнив своє лідерство в Прем'єр-лізі",
++            description="Shakhtar secured victory over Zorya thanks to a penalty converted by Artem Bondarenko.",
++            source_name="Glavcom",
++            source_language="uk",
++            published_at=now,
++        ),
++    ]
++    assert len(group_into_stories(normalize_articles(articles))) == 1
++
++
++def test_reject_topic_news_hub_page() -> None:
++    now = datetime.now(tz=timezone.utc)
++    plan = build_search_plan("microsoft", from_dt=now, to_dt=now, first_run=True)
++    assert not is_candidate_article(
++        plan,
++        url="https://www.windowscentral.com/microsoft",
++        title="Microsoft News | Windows Central",
++        description="Latest Microsoft news from Windows Central",
++    )
++
++
++def test_python_is_treated_as_software_topic_not_generic_snake() -> None:
++    assert classify_topic("python") == "technology"
++    now = datetime.now(tz=timezone.utc)
++    plan = build_search_plan("python", from_dt=now, to_dt=now, first_run=True)
++    joined = " ".join(plan.query_variants).lower()
++    assert "programming language" in joined or "software" in joined
++    assert not is_candidate_article(
++        plan,
++        url="https://example.com/2026/04/25/giant-python-found-in-zoo",
++        title="Giant python found in city zoo",
++        description="A reptile escaped from its enclosure.",
++    )
++
++
++def test_esports_acronym_query_is_esports() -> None:
++    assert classify_topic("BLAST CS") == "esports"
++
++
++def test_search_snippet_fallback_is_high_confidence_only() -> None:
++    source = object.__new__(OpenRouterWebSearchSource)
++    source._require_verified_publish_date = True
++    source._allow_undated_fallback = False
++    source._debug_rejections = False
++    source._max_article_age_hours = 168
++    source._future_skew_hours = 12
++    source._search_snippet_fallback_min_directness = 12
++    source._search_snippet_fallback_min_confidence = 2
++
++    now = datetime(2026, 4, 26, 12, tzinfo=timezone.utc)
++    plan = build_search_plan("microsoft", from_dt=now, to_dt=now, first_run=True)
++    item = RawSourceItem(
++        provider="openrouter_web_search",
++        url="https://example.com/2026/04/26/microsoft-security-update",
++        title="Microsoft releases security update for Windows developers",
++        description="Microsoft published a new software security update affecting Windows developer tools.",
++        source_name="example.com",
++        published_at=None,
++        metadata={"search_annotation": True, "search_snippet": True},
++    )
++    accepted = source._fallback_candidate(
++        item,
++        from_dt=now,
++        to_dt=now,
++        plan=plan,
++        reason="test",
++        allow_search_snippet_fallback=True,
++    )
++    assert accepted is not None
++    assert accepted.metadata["published_at_source"] in {"url", "search_snippet"}
+
+--- /dev/null
++++ QUALITY_ENGINE_V5_2_BALANCE_RU.md
++# Quality Engine v5.2 — freshness/recall balance
++
++Эта версия продолжает v5.1. Цель: не возвращать старьё, но и не убивать поиск до нуля из-за слишком жёсткого требования verified publish date.
++
++## Что исправлено
++
++1. **Сбалансированный freshness fallback**
++   - По умолчанию по-прежнему предпочитается подтверждённая дата публикации из metadata или URL.
++   - Если строгий режим дал слишком мало кандидатов, движок может использовать OpenRouter search annotation/snippet как weak-freshness fallback.
++   - Такой fallback разрешён только для кандидатов с высоким directness/article confidence.
++   - В итоговом дайджесте weak-freshness кандидаты ограничены: по умолчанию максимум 1.
++
++2. **News hub guard**
++   - Блокируются страницы вида `Microsoft News | Windows Central`, `Bitcoin News Today`, `Latest X News`.
++   - Это не статьи, а разделы/лендинги, даже если сайт подсовывает свежий modified/datePublished.
++
++3. **Cyrillic / Ukrainian story dedup**
++   - Дедупликация теперь понимает кириллицу и украинские токены.
++   - Матч-репорты вроде `Шахтар — Зоря` из разных источников должны склеиваться в один сюжет.
++
++4. **Generic software/technology class**
++   - Темы вроде `python` теперь считаются software/technology, а не generic broad topic.
++   - Добавлены позитивные контексты: programming, software, release, security, developer.
++   - Добавлены негативные контексты для Python как животного: snake, reptile, zoo.
++
++5. **Generic esports acronym handling**
++   - Темы с `CS`, `CS2`, `Dota`, `Valorant` и похожими маркерами идут в esports strategy.
++   - Это не хардкод под BLAST; это общий класс для киберспортивных запросов.
++
++## Новые настройки .env
++
++```env
++OPENROUTER_ALLOW_SEARCH_SNIPPET_FALLBACK=true
++OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_DIRECTNESS=12
++OPENROUTER_SEARCH_SNIPPET_FALLBACK_MIN_CONFIDENCE=2
++OPENROUTER_MAX_WEAK_FRESHNESS_ITEMS_PER_DIGEST=1
++```
++
++## Важная логика
++
++v5.1 был слишком строгим: без verified date он часто давал 0.
++v5.2 делает так:
++
++1. Сначала строгий проход: verified publish date only.
++2. Если кандидатов мало — rescue pass без нового OpenRouter-запроса.
++3. Rescue pass берёт только сильные search-annotation кандидаты.
++4. Эти кандидаты получают штраф в ranking и лимитируются в публикации.
++
++Идея: лучше 1 слабоподтверждённый, но очень релевантный свежий кандидат, чем 0 по темам вроде крупных политиков/киберспорта/технологий. Но старые статьи и hub pages всё равно режутся.
+
+--- /dev/null
++++ START_HERE_V5_2_RU.md
++# Как запускать v5.2
++
++1. Распакуй архив.
++2. Проверь свой `.env`. Старый `.env` сам не обновляется.
++3. Добавь настройки из `.env.example`, особенно блок v5.2.
++4. Запусти тесты:
++
++```bash
++pytest -q tests/test_quality_engine_v52.py tests/test_freshness_guard_v51.py tests/test_search_v2.py tests/test_deduplication.py tests/test_quality_filters.py
++```
++
++5. Проверь темы: крупная политика, бренд, спорт/киберспорт, технология, локальная кириллическая тема.
++
++Главное смотреть:
++
++- нет ли старых статей;
++- не пролезают ли news hub pages;
++- не дублируется ли один матч/событие разными источниками;
++- исчезли ли нули на широких актуальных темах.
+
+--- /dev/null
++++ TEST_REPORT_V5_2.md
++# Test report v5.2
++
++Checked in this environment:
++
++- `py_compile` for modified Python files: PASS
++- Manual deterministic filter checks: PASS
++  - `python` classified as `technology`
++  - `BLAST CS` classified as `esports`
++  - `Microsoft News | Windows Central` rejected as `topic_news_hub_page`
++  - Python snake/zoo result rejected via negative context
++
++Not fully run here:
++
++- Full `pytest`, because this container hangs while importing some installed runtime dependencies. The files are syntax-checked, and the new deterministic tests are included for your local environment.
++
++Recommended local command:
++
++```bash
++pytest -q tests/test_quality_engine_v52.py tests/test_freshness_guard_v51.py tests/test_search_v2.py tests/test_deduplication.py tests/test_quality_filters.py
++```

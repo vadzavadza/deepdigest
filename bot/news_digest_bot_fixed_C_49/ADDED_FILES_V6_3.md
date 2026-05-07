@@ -1,0 +1,12 @@
+- app/search_v2/recorder.py
+- app/tools/__init__.py
+- app/tools/replay_search_run.py
+- app/tools/benchmark_plan.py
+- eval_fixtures/benchmark_topics.jsonl
+- tests/test_quality_engine_v63_eval_replay.py
+- QUALITY_ENGINE_V6_3_EVAL_REPLAY_RU.md
+- START_HERE_V6_3_RU.md
+- TEST_REPORT_V6_3.md
+- REMOVED_FILES_V6_3.md
+
+- debug_runs/.gitkeep

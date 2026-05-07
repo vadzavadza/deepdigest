@@ -1,0 +1,8 @@
+- app/infrastructure/sources/openrouter_web_search.py
+- app/search_v2/core.py
+- app/search_v2/strategy.py
+- app/search_v2/article_filter.py
+- app/application/services/topic_processing.py
+- app/shared/settings.py
+- app/shared/logging.py
+- .env.example

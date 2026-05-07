@@ -1,0 +1,575 @@
+--- a/.env.example
++++ b/.env.example
+@@ -69,3 +69,12 @@
+ SEARCH_DEBUG_DUMP_ENABLED=false
+ SEARCH_DEBUG_DUMP_DIR=debug_runs
+ SEARCH_EVAL_FIXTURE_DIR=eval_fixtures
++
++# v7.1 OpenRouter-native usage
++# Use OpenRouter web_search as a structured news agent, not only as a raw URL provider.
++OPENROUTER_NATIVE_NEWS_AGENT_ENABLED=true
++OPENROUTER_NATIVE_JUDGE_MIN_TOPIC_MATCH=0.62
++OPENROUTER_NATIVE_JUDGE_MAX_CANDIDATES=8
++OPENROUTER_NATIVE_REJECT_WEAK_SOURCES=true
++# For testing, debug dumps are strongly recommended. app_debug=true also enables dumps in v7.1.
++SEARCH_DEBUG_DUMP_ENABLED=true
+--- a/app/infrastructure/sources/openrouter_web_search.py
++++ b/app/infrastructure/sources/openrouter_web_search.py
+@@ -89,6 +89,10 @@
+         self._max_calls_per_topic = max(settings.openrouter_web_search_max_calls_per_topic, 1)
+         self._min_quality_candidates = max(settings.openrouter_min_quality_candidates, 1)
+         self._allow_plugin_fallback = settings.openrouter_allow_plugin_fallback
++        self._native_news_agent_enabled = settings.openrouter_native_news_agent_enabled
++        self._native_judge_min_topic_match = max(0.0, min(settings.openrouter_native_judge_min_topic_match, 1.0))
++        self._native_judge_max_candidates = max(settings.openrouter_native_judge_max_candidates, 1)
++        self._native_reject_weak_sources = settings.openrouter_native_reject_weak_sources
+         self._debug_rejections = settings.openrouter_debug_rejections
+         self._max_article_age_hours = max(settings.openrouter_max_article_age_hours, 1)
+         self._require_verified_publish_date = settings.openrouter_require_verified_publish_date
+@@ -109,7 +113,7 @@
+             weak_min_directness=self._search_snippet_fallback_min_directness,
+             weak_min_article_confidence=self._search_snippet_fallback_min_confidence,
+         )
+-        self._debug_dump_enabled = settings.search_debug_dump_enabled
++        self._debug_dump_enabled = settings.search_debug_dump_enabled or settings.app_debug
+         self._debug_dump_dir = settings.search_debug_dump_dir
+ 
+     async def fetch(
+@@ -170,6 +174,9 @@
+                 "allow_search_snippet_fallback": self._allow_search_snippet_fallback,
+                 "max_article_age_hours": self._max_article_age_hours,
+                 "verified_hard_max_article_age_hours": self._freshness_policy.hard_age_hours,
++                "native_news_agent_enabled": self._native_news_agent_enabled,
++                "native_judge_min_topic_match": self._native_judge_min_topic_match,
++                "native_judge_max_candidates": self._native_judge_max_candidates,
+             },
+         )
+ 
+@@ -339,30 +346,61 @@
+         broad_topic: bool = False,
+         topic_kind: str | None = None,
+     ) -> dict[str, Any]:
++        if self._native_news_agent_enabled:
++            system_prompt = (
++                "You are a strict news editor and web-search agent. Use web search to find current, specific news articles. "
++                "Do not behave like a generic search engine. Judge every candidate before returning it. "
++                "Reject homepages, category pages, support/FAQ pages, buyer guides, reviews, price pages, stock quote pages, old archive pages, and weak aggregators unless there is no better source. "
++                "Keep one semantic vertical per topic; do not mix unrelated meanings of ambiguous names. "
++                "Return JSON only, with no markdown."
++            )
++            user_prompt = (
++                f"Search query: {query}\n"
++                f"Detected topic type: {topic_kind or ('broad/general' if broad_topic else 'specific')}\n"
++                f"Freshness target start: {from_dt.isoformat()}\n"
++                f"Freshness target end: {to_dt.isoformat()}\n"
++                f"Return up to {min(limit, self._native_judge_max_candidates)} candidates in this exact JSON shape:\n"
++                "{\n"
++                "  \"candidates\": [\n"
++                "    {\n"
++                "      \"title\": \"article title\",\n"
++                "      \"url\": \"https://...\",\n"
++                "      \"source\": \"source/domain\",\n"
++                "      \"published_at\": \"ISO-8601 date if visible, else null\",\n"
++                "      \"summary\": \"one sentence\",\n"
++                "      \"is_news_article\": true,\n"
++                "      \"is_fresh\": true,\n"
++                "      \"topic_match\": 0.0,\n"
++                "      \"source_quality\": \"tier1|strong_niche|standard|weak|blocked\",\n"
++                "      \"reject_reason\": null\n"
++                "    }\n"
++                "  ]\n"
++                "}\n"
++                "Rules: topic_match must be 0..1. Return only specific article URLs. "
++                "If a candidate is not a real current news article, set is_news_article=false and reject_reason. "
++                "Prefer authoritative or strong niche sources over weak aggregators."
++            )
++        else:
++            system_prompt = (
++                "You are a news discovery assistant. Search the web for current news article candidates for the given search query. "
++                "Prefer authoritative journalism, official reports, and pages that look like specific articles. Avoid old archive articles, "
++                "evergreen pages, stale explainers, homepages, category pages and generic news hubs. Do not return zero solely because "
++                "a publication date is not visible in the search result; local validation will verify dates and reject stale items."
++            )
++            user_prompt = (
++                f"Search query: {query}\n"
++                f"Detected topic type: {topic_kind or ('broad/general' if broad_topic else 'specific')}\n"
++                f"Target freshness window start: {from_dt.isoformat()}\n"
++                f"Target freshness window end: {to_dt.isoformat()}\n"
++                f"Return up to {limit} specific article links that are likely to be current/recent. "
++                "Prefer visible publication dates, but include strong article candidates even when the date is not shown in the search result. "
++                "Use short one-line reasons. Exclude homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, reviews, buyer guides, stock-analysis pages, price pages, and generic news-hub pages."
++            )
+         body = {
+             "model": self._model,
+             "messages": [
+-                {
+-                    "role": "system",
+-                    "content": (
+-                        "You are a news discovery assistant. Search the web for current news article candidates for the given search query. "
+-                        "Prefer authoritative journalism, official reports, and pages that look like specific articles. Avoid old archive articles, "
+-                        "evergreen pages, stale explainers, homepages, category pages and generic news hubs. Do not return zero solely because "
+-                        "a publication date is not visible in the search result; local validation will verify dates and reject stale items."
+-                    ),
+-                },
+-                {
+-                    "role": "user",
+-                    "content": (
+-                        f"Search query: {query}\n"
+-                        f"Detected topic type: {topic_kind or ('broad/general' if broad_topic else 'specific')}\n"
+-                        f"Target freshness window start: {from_dt.isoformat()}\n"
+-                        f"Target freshness window end: {to_dt.isoformat()}\n"
+-                        f"Return up to {limit} specific article links that are likely to be current/recent. "
+-                        "Prefer visible publication dates, but include strong article candidates even when the date is not shown in the search result. "
+-                        "Use short one-line reasons. Exclude homepages, encyclopedias, non-news explainers, organization landing pages, category pages, old archive pages, reviews, buyer guides, stock-analysis pages, price pages, and generic news-hub pages."
+-                    ),
+-                },
++                {"role": "system", "content": system_prompt},
++                {"role": "user", "content": user_prompt},
+             ],
+             "temperature": 0,
+             "top_p": 0.2,
+@@ -377,6 +415,8 @@
+                 }
+             ],
+         }
++        if self._native_news_agent_enabled:
++            body["response_format"] = {"type": "json_object"}
+         return await self._post_chat_completions(body)
+ 
+     async def _call_plugin_fallback(
+@@ -401,7 +441,7 @@
+                     "role": "user",
+                     "content": (
+                         f"Search query: {query}\n"
+-                        f"Detected topic type: {topic_kind or ('broad/general' if broad_topic else 'specific')}\n"
++                        "Detected topic type: legacy_fallback\n"
+                         f"Target freshness window start: {from_dt.isoformat()}\n"
+                         f"Target freshness window end: {to_dt.isoformat()}\n"
+                         f"Return up to {limit} specific article links that are likely to be current/recent. "
+@@ -430,11 +470,121 @@
+             response.raise_for_status()
+             return response.json()
+ 
++    def _extract_native_items_from_message(self, message: dict[str, Any], limit: int) -> list[RawSourceItem]:
++        if not self._native_news_agent_enabled:
++            return []
++        parsed = self._parse_native_json(self._flatten_content(message.get("content", "")))
++        candidates = parsed.get("candidates") if isinstance(parsed, dict) else None
++        if not isinstance(candidates, list):
++            return []
++        items: list[RawSourceItem] = []
++        for candidate in candidates[: max(limit, self._native_judge_max_candidates)]:
++            if not isinstance(candidate, dict):
++                continue
++            raw_url = str(candidate.get("url") or "").strip()
++            if not raw_url:
++                continue
++            parsed_url = self._safe_http_url(raw_url)
++            if parsed_url is None:
++                continue
++            if not self._native_candidate_usable(candidate):
++                continue
++            title = str(candidate.get("title") or self._title_from_url(raw_url)).strip()[:240]
++            summary = str(candidate.get("summary") or candidate.get("description") or "").strip() or None
++            source_name = str(candidate.get("source") or urlparse(raw_url).netloc.replace("www.", "")).strip()
++            published_at = self._parse_candidate_datetime(candidate.get("published_at"))
++            metadata = {
++                "native_judge": True,
++                "native_topic_match": self._float_or_none(candidate.get("topic_match")),
++                "native_source_quality": str(candidate.get("source_quality") or "").lower() or None,
++                "native_reject_reason": candidate.get("reject_reason"),
++                "native_is_fresh": candidate.get("is_fresh"),
++                "native_is_news_article": candidate.get("is_news_article"),
++                "search_annotation": True,
++                "search_snippet": bool(summary),
++            }
++            if published_at is not None:
++                metadata["published_at_source"] = "openrouter_native"
++            items.append(
++                RawSourceItem(
++                    source_type=self.source_type,
++                    provider=self.name,
++                    url=parsed_url,
++                    title=title,
++                    description=summary,
++                    source_name=source_name or urlparse(raw_url).netloc.replace("www.", ""),
++                    source_language=None,
++                    published_at=published_at,
++                    metadata=metadata,
++                )
++            )
++            if len(items) >= limit:
++                break
++        return items
++
++    def _native_candidate_usable(self, candidate: dict[str, Any]) -> bool:
++        if candidate.get("is_news_article") is False:
++            return False
++        reject_reason = candidate.get("reject_reason")
++        if reject_reason not in (None, "", False):
++            return False
++        topic_match = self._float_or_none(candidate.get("topic_match"))
++        if topic_match is not None and topic_match < self._native_judge_min_topic_match:
++            return False
++        source_quality = str(candidate.get("source_quality") or "").lower().strip()
++        if self._native_reject_weak_sources and source_quality in {"blocked", "spam", "irrelevant"}:
++            return False
++        return True
++
++    @staticmethod
++    def _float_or_none(value: Any) -> float | None:
++        try:
++            return float(value)
++        except Exception:
++            return None
++
++    @staticmethod
++    def _parse_candidate_datetime(value: Any) -> datetime | None:
++        if value in (None, "", False):
++            return None
++        return OpenRouterWebSearchSource._parse_datetime(str(value).strip())
++
++    @staticmethod
++    def _parse_native_json(text: str) -> dict[str, Any]:
++        text = (text or "").strip()
++        if not text:
++            return {}
++        if text.startswith("```"):
++            text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE).strip()
++            text = re.sub(r"\s*```$", "", text).strip()
++        try:
++            parsed = json.loads(text)
++            return parsed if isinstance(parsed, dict) else {}
++        except Exception:
++            pass
++        match = re.search(r"\{.*\}", text, re.DOTALL)
++        if match:
++            try:
++                parsed = json.loads(match.group(0))
++                return parsed if isinstance(parsed, dict) else {}
++            except Exception:
++                return {}
++        return {}
++
+     def _extract_items_from_payload(self, payload: dict[str, Any], limit: int) -> list[RawSourceItem]:
+         message = payload.get("choices", [{}])[0].get("message", {})
+         annotations = message.get("annotations") or []
+         items: list[RawSourceItem] = []
+         seen_urls: set[str] = set()
++
++        for native_item in self._extract_native_items_from_message(message, limit):
++            raw_url = str(native_item.url) if native_item.url is not None else None
++            if not raw_url or raw_url in seen_urls:
++                continue
++            seen_urls.add(raw_url)
++            items.append(native_item)
++            if len(items) >= limit:
++                return items
+ 
+         for ann in annotations:
+             citation = ann.get("url_citation") or {}
+@@ -569,6 +719,9 @@
+                     canonical_url=canonical_url,
+                     last_modified=response.headers.get("last-modified"),
+                 )
++                if published_at is None and item.published_at is not None:
++                    published_at = item.published_at
++                    published_source = str(item.metadata.get("published_at_source") or "openrouter_native")
+                 decision = evaluate_candidate(
+                     plan,
+                     url=canonical_url,
+@@ -610,6 +763,10 @@
+                         "source_weight": source_quality_weight(item.source_name, plan.topic_kind),
+                         "authority_tier": source_authority_tier(item.source_name, plan.topic_kind),
+                         "topic_kind": plan.topic_kind,
++                        "native_judge": item.metadata.get("native_judge"),
++                        "native_topic_match": item.metadata.get("native_topic_match"),
++                        "native_source_quality": item.metadata.get("native_source_quality"),
++                        "native_reject_reason": item.metadata.get("native_reject_reason"),
+                         **decision.metadata,
+                     },
+                 }))
+@@ -637,8 +794,8 @@
+             return None
+ 
+         url_date = self._extract_date_from_url(url)
+-        published_at = url_date
+-        published_source = "url" if url_date is not None else None
++        published_at = url_date or item.published_at
++        published_source = "url" if url_date is not None else (str(item.metadata.get("published_at_source")) if item.published_at is not None else None)
+         decision = evaluate_candidate(
+             plan,
+             url=url,
+--- a/app/search_v2/core.py
++++ b/app/search_v2/core.py
+@@ -137,7 +137,7 @@
+     if qreason in {"wrong_entity_context", "generic_phrase_not_entity", "sports_drift_for_city", "finance_only_drift"}:
+         return CandidateDecision(CandidateStatus.WRONG_ENTITY, qreason, quality.score, quality.directness_score, article_conf, False, published_at, published_at_source)
+ 
+-    verified = published_at_source in {"metadata", "url"}
++    verified = published_at_source in {"metadata", "url", "openrouter_native"}
+     future_ceiling = to_dt + timedelta(hours=policy.future_skew_hours)
+     if published_at is not None and published_at > future_ceiling:
+         return CandidateDecision(CandidateStatus.REJECTED, "future_publish_date", quality.score, quality.directness_score, article_conf, verified, published_at, published_at_source)
+--- a/app/search_v2/strategy.py
++++ b/app/search_v2/strategy.py
+@@ -97,6 +97,23 @@
+     "new york": {"positive": {"nyc", "new york city", "mayor", "manhattan", "brooklyn"}, "negative": {"new york state"}},
+ }
+ 
++
++_CITY_DISAMBIGUATION: Final[dict[str, str]] = {
++    "kyiv": "ukraine",
++    "lviv": "ukraine",
++    "kharkiv": "ukraine",
++    "odesa": "ukraine",
++    "dnipro": "ukraine",
++    "paris": "france",
++    "rome": "italy",
++    "london": "uk",
++    "berlin": "germany",
++    "madrid": "spain",
++    "barcelona": "spain",
++    "tbilisi": "georgia",
++    "new york": "new york city",
++}
++
+ _AMBIGUOUS_ENTITY_HINTS: Final[dict[str, dict[str, set[str]]]] = {
+     "georgia": {
+         "country": {"tbilisi", "caucasus", "georgian government", "ruling party", "parliament"},
+@@ -244,14 +261,20 @@
+             if candidate not in bases:
+                 bases.append(candidate)
+     if kind == "city":
+-        context = _CITY_CONTEXTS.get(canonical, {}).get("positive", set())
+-        # Add one disambiguated city form early, e.g. "paris france" or "odesa ukraine".
+-        for term in sorted(context):
+-            if len(term.split()) <= 2 and term not in {"mayor", "capital", "city hall", "city council"}:
+-                disambiguated = f"{canonical} {term}"
+-                if disambiguated not in bases:
+-                    bases.insert(1, disambiguated)
+-                break
++        preferred = _CITY_DISAMBIGUATION.get(canonical)
++        if preferred:
++            disambiguated = f"{canonical} {preferred}"
++            if disambiguated not in bases:
++                bases.insert(1, disambiguated)
++        else:
++            context = _CITY_CONTEXTS.get(canonical, {}).get("positive", set())
++            # Add one disambiguated city form early, e.g. "paris france" or "odesa ukraine".
++            for term in sorted(context):
++                if len(term.split()) <= 2 and term not in {"mayor", "capital", "city hall", "city council"}:
++                    disambiguated = f"{canonical} {term}"
++                    if disambiguated not in bases:
++                        bases.insert(1, disambiguated)
++                    break
+     return bases[:4]
+ 
+ 
+@@ -556,6 +579,9 @@
+     elif kind == "weather_like":
+         variants.extend([f'{quoted} severe weather news {freshness}', f'{quoted} flood drought storm news {freshness}'])
+     elif kind == "city":
++        preferred = _CITY_DISAMBIGUATION.get(q)
++        if preferred:
++            variants.append(f'{quoted} {preferred} local news incident government {freshness}')
+         variants.extend([f'{quoted} city latest developments {freshness}', f'{quoted} local government transport incident {freshness}', f'{quoted} region breaking news {freshness}', f'{quoted} Reuters AP BBC latest {freshness}'])
+         soft |= {"city", "region", "local", "incident", "government"} | positive_context
+     elif kind == "country":
+--- a/app/search_v2/article_filter.py
++++ b/app/search_v2/article_filter.py
+@@ -34,7 +34,8 @@
+ }
+ _AMBIGUOUS_CS_CONTEXT = {"counter-strike", "counter strike", "cs2", "esports", "hltv", "blast", "iem", "esl", "valve", "major", "tournament", "roster"}
+ _SERVICE_PAGE_HINTS = {
+-    "homepage", "login", "subscribe", "sign up", "newsletter", "contact us", "privacy policy", "terms of service"
++    "homepage", "login", "subscribe", "sign up", "newsletter", "contact us", "privacy policy", "terms of service",
++    "customer faq", "faq", "help center", "support page", "learn how", "how to", "troubleshooting",
+ }
+ 
+ 
+@@ -220,6 +221,11 @@
+         return "review_or_buying_guide"
+     if _contains_any(hay, _SERVICE_PAGE_HINTS):
+         return "evergreen_or_service_content"
++    if plan.topic_kind in {"brand_company", "technology"}:
++        service_path = any(seg in path for seg in ("/support", "/faq", "/help", "/customer-service", "/learn", "/manual"))
++        newsroom_path = any(seg in path for seg in ("/news", "/press", "/media", "/newsroom", "/stories", "/story"))
++        if service_path and not newsroom_path:
++            return "evergreen_or_service_content"
+ 
+     features = topic_match_features(plan, title=title, description=description, url=url)
+     required_hits = int(features["required_hits"])
+--- a/app/application/services/topic_processing.py
++++ b/app/application/services/topic_processing.py
+@@ -270,7 +270,7 @@
+                 primary_score = article_score(primary)
+                 source_weight = source_quality_weight(primary.source_name, str(primary.metadata.get("topic_kind", "")))
+                 authority_tier = source_authority_tier(primary.source_name, str(primary.metadata.get("topic_kind", "")))
+-                if source_weight < -5.0 or (is_weak_freshness and source_weight < 8.0):
++                if source_weight < 0.0 or (is_weak_freshness and source_weight < 12.0):
+                     skipped_low_quality += 1
+                     logger.info(
+                         "story_skipped_low_source_quality",
+--- a/app/shared/settings.py
++++ b/app/shared/settings.py
+@@ -34,6 +34,12 @@
+     openrouter_web_search_rescue_max_calls: int = 3
+     openrouter_min_quality_candidates: int = 3
+     openrouter_allow_plugin_fallback: bool = False
++    # v7.1: use OpenRouter as a native news agent, not only as a raw link provider.
++    # The model is asked to return structured JSON candidates while using openrouter:web_search.
++    openrouter_native_news_agent_enabled: bool = True
++    openrouter_native_judge_min_topic_match: float = 0.62
++    openrouter_native_judge_max_candidates: int = 8
++    openrouter_native_reject_weak_sources: bool = True
+     openrouter_debug_rejections: bool = True
+     # v6: do not reject useful verified articles just because they are 8-30 days old.
+     # Soft age affects ranking; hard age is the maximum retrieval safety window.
+--- a/app/shared/logging.py
++++ b/app/shared/logging.py
+@@ -33,6 +33,18 @@
+         level=logging.DEBUG if settings.app_debug else logging.INFO,
+     )
+ 
++    # Keep application debug logs useful without leaking Bot API tokens through
++    # verbose httpx/httpcore/python-telegram-bot request dumps. Our own structured
++    # search events still stay visible via structlog.
++    for noisy_logger in (
++        'httpx',
++        'httpcore',
++        'telegram',
++        'telegram.ext',
++        'apscheduler',
++    ):
++        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
++
+     if structlog is None:
+         return
+ 
+--- a/START_HERE_V7_1_RU.md
++++ b/START_HERE_V7_1_RU.md
+@@ -0,0 +1,45 @@
++# v7.1 OpenRouter-Native News Agent — старт
++
++Эта версия не переписывает весь бот. Она меняет то, как используется OpenRouter:
++
++- OpenRouter теперь получает задачу не просто “дай ссылки”, а “найди и оцени конкретные новостные статьи”.
++- Запрос просит строгий JSON: title, url, source, published_at, summary, topic_match, source_quality, reject_reason.
++- Локальный движок остаётся safety net: проверяет URL, свежесть, source quality, повторы, weak freshness и бюджет.
++
++## Важные `.env`
++
++```env
++NEWS_TOPIC_SOFT_BUDGET_USD=0.07
++NEWS_TOPIC_HARD_BUDGET_USD=0.10
++OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=5
++OPENROUTER_WEB_SEARCH_NORMAL_MAX_CALLS=2
++OPENROUTER_WEB_SEARCH_RESCUE_MAX_CALLS=3
++OPENROUTER_NATIVE_NEWS_AGENT_ENABLED=true
++OPENROUTER_NATIVE_JUDGE_MIN_TOPIC_MATCH=0.62
++OPENROUTER_NATIVE_JUDGE_MAX_CANDIDATES=8
++OPENROUTER_NATIVE_REJECT_WEAK_SOURCES=true
++APP_DEBUG=true
++OPENROUTER_DEBUG_REJECTIONS=true
++SEARCH_DEBUG_DUMP_ENABLED=true
++SEARCH_DEBUG_DUMP_DIR=debug_runs
++```
++
++## Запуск
++
++```cmd
++powershell -Command "docker compose up --build --force-recreate 2>&1 | Tee-Object -FilePath debug_v7_1.log"
++```
++
++## После теста
++
++```cmd
++docker compose run --rm app python -m app.tools.replay_search_run debug_runs/*.json --out debug_runs/replay_report_v7_1.md --json-out debug_runs/replay_summary_v7_1.json
++```
++
++Скидывать лучше:
++
++- `debug_runs/replay_report_v7_1.md`
++- `debug_runs/replay_summary_v7_1.json`
++- скрины Telegram
++
++Полный `debug_v7_1.log` лучше не скидывать: даже с фильтрами он может содержать лишнее.
+--- a/QUALITY_ENGINE_V7_1_OPENROUTER_NATIVE_RU.md
++++ b/QUALITY_ENGINE_V7_1_OPENROUTER_NATIVE_RU.md
+@@ -0,0 +1,35 @@
++# v7.1: OpenRouter-Native News Agent
++
++## Зачем
++
++В v7 OpenRouter использовался в основном как источник ссылок. Это давало результат, но часть качества приходилось угадывать локальными правилами. В v7.1 OpenRouter используется глубже: модель с `openrouter:web_search` должна не только найти страницы, но и вернуть структурированную оценку кандидатов.
++
++## Что изменено
++
++1. **Native JSON news-agent режим**
++   - Запрос к OpenRouter просит JSON `candidates[]`.
++   - Каждый кандидат содержит `is_news_article`, `topic_match`, `source_quality`, `published_at`, `reject_reason`.
++   - Плохие кандидаты отбрасываются до HTTP-enrich.
++
++2. **Локальный safety net сохранён**
++   - Даже если OpenRouter считает статью хорошей, локальный движок всё равно проверяет article-likeness, source vertical, freshness, hub/review/support страницы и повторы.
++
++3. **Строже финальный селектор**
++   - Источники с отрицательным source weight больше не проходят в финальную отправку.
++   - Weak freshness требует source weight не ниже 12.
++
++4. **Geo alias / city query fix**
++   - Для городов добавлены disambiguated query bases: `Tbilisi Georgia`, `Paris France`, `Kyiv Ukraine`, etc.
++
++5. **FAQ/support filter**
++   - Для brand/company и technology тем страницы `/support`, `/faq`, `/help`, customer FAQ, troubleshooting и similar evergreen pages режутся как не-news.
++
++6. **Debug dump fix**
++   - При `APP_DEBUG=true` JSON dumps включаются автоматически даже если `SEARCH_DEBUG_DUMP_ENABLED` забыли поставить.
++
++7. **Token-safe logging**
++   - Снижен уровень шумных `httpx/httpcore/telegram` логгеров, чтобы не тащить Bot API URL с токеном в debug log.
++
++## Бюджет
++
++Soft target остаётся `$0.07`, hard cap — `$0.10`. Третий pass всё ещё rescue-only.
+--- a/TEST_REPORT_V7_1.md
++++ b/TEST_REPORT_V7_1.md
+@@ -0,0 +1,13 @@
++# Test report v7.1
++
++Проверено локально в sandbox:
++
++- py_compile changed files: PASS
++- zip integrity: PASS
++
++Не запускалось:
++
++- Live OpenRouter
++- Live Telegram
++
++Причина: нужны реальные ключи и Docker окружение пользователя.
+--- a/ADDED_FILES_V7_1.md
++++ b/ADDED_FILES_V7_1.md
+@@ -0,0 +1,6 @@
++- START_HERE_V7_1_RU.md
++- QUALITY_ENGINE_V7_1_OPENROUTER_NATIVE_RU.md
++- TEST_REPORT_V7_1.md
++- CHANGED_FILES_V7_1.md
++- REMOVED_FILES_V7_1.md
++- PATCH_V7_TO_V7_1.diff
+--- a/CHANGED_FILES_V7_1.md
++++ b/CHANGED_FILES_V7_1.md
+@@ -0,0 +1,8 @@
++- app/infrastructure/sources/openrouter_web_search.py
++- app/search_v2/core.py
++- app/search_v2/strategy.py
++- app/search_v2/article_filter.py
++- app/application/services/topic_processing.py
++- app/shared/settings.py
++- app/shared/logging.py
++- .env.example
+--- a/REMOVED_FILES_V7_1.md
++++ b/REMOVED_FILES_V7_1.md
+@@ -0,0 +1 @@
++Удалено рабочих файлов: 0

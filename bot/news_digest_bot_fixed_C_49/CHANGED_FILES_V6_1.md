@@ -1,0 +1,9 @@
+.env.example
+app/application/services/topic_processing.py
+app/bot/handlers/topics_list.py
+app/domain/policies/ranking.py
+app/infrastructure/sources/openrouter_web_search.py
+app/search_v2/__init__.py
+app/search_v2/core.py
+app/shared/settings.py
+tests/test_quality_engine_v61.py

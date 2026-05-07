@@ -1,0 +1,205 @@
+diff -ru '--exclude=__pycache__' '--exclude=*.pyc' v7base/.env.example v7work/.env.example
+--- v7base/.env.example	2026-04-27 11:27:40.000000000 +0000
++++ v7work/.env.example	2026-04-27 18:32:37.892236860 +0000
+@@ -15,10 +15,15 @@
+ OPENROUTER_DEFAULT_MODEL=openai/gpt-4.1-mini
+ OPENROUTER_SEARCH_MODEL=
+ OPENROUTER_WEB_SEARCH_MAX_RESULTS=15
+-OPENROUTER_TOPIC_BUDGET_USD=0.07
++NEWS_TOPIC_SOFT_BUDGET_USD=0.07
++NEWS_TOPIC_HARD_BUDGET_USD=0.10
++OPENROUTER_RESERVED_LLM_BUDGET_USD=0.025
++OPENROUTER_TOPIC_BUDGET_USD=0.10
+ OPENROUTER_SEARCH_RESULT_COST_USD=0.004
+ OPENROUTER_WEB_SEARCH_RESULTS_PER_CALL=5
+ OPENROUTER_WEB_SEARCH_MAX_CALLS_PER_TOPIC=3
++OPENROUTER_WEB_SEARCH_NORMAL_MAX_CALLS=2
++OPENROUTER_WEB_SEARCH_RESCUE_MAX_CALLS=3
+ OPENROUTER_MIN_QUALITY_CANDIDATES=3
+ OPENROUTER_ALLOW_PLUGIN_FALLBACK=false
+ OPENROUTER_DEBUG_REJECTIONS=true
+Only in v7work: .git
+Only in v7work: PATCH_V6_3_TO_V7.diff
+Only in v7work: QUALITY_ENGINE_V7_BUDGET_LOCKED_RU.md
+Only in v7work: START_HERE_V7_RU.md
+Only in v7work: TEST_REPORT_V7.md
+diff -ru '--exclude=__pycache__' '--exclude=*.pyc' v7base/app/application/services/topic_processing.py v7work/app/application/services/topic_processing.py
+--- v7base/app/application/services/topic_processing.py	2026-04-27 10:30:58.000000000 +0000
++++ v7work/app/application/services/topic_processing.py	2026-04-27 18:28:32.590420556 +0000
+@@ -268,6 +268,20 @@
+                     )
+                     continue
+                 primary_score = article_score(primary)
++                source_weight = source_quality_weight(primary.source_name, str(primary.metadata.get("topic_kind", "")))
++                authority_tier = source_authority_tier(primary.source_name, str(primary.metadata.get("topic_kind", "")))
++                if source_weight < -5.0 or (is_weak_freshness and source_weight < 8.0):
++                    skipped_low_quality += 1
++                    logger.info(
++                        "story_skipped_low_source_quality",
++                        topic_id=topic_id,
++                        story_hash=story.story_hash,
++                        source_name=primary.source_name,
++                        source_weight=source_weight,
++                        authority_tier=authority_tier,
++                        freshness_verified=primary.metadata.get("freshness_verified"),
++                    )
++                    continue
+                 if primary.url is None or primary_score < 0:
+                     skipped_low_quality += 1
+                     logger.info(
+diff -ru '--exclude=__pycache__' '--exclude=*.pyc' v7base/app/domain/policies/ranking.py v7work/app/domain/policies/ranking.py
+--- v7base/app/domain/policies/ranking.py	2026-04-27 10:29:07.000000000 +0000
++++ v7work/app/domain/policies/ranking.py	2026-04-27 18:28:20.789277037 +0000
+@@ -298,3 +298,10 @@
+         ),
+         reverse=True,
+     )
++
++# v7 override: shared editorial source-quality model.
++from app.search_v2.source_quality import (  # noqa: E402,F811
++    source_quality_weight as source_quality_weight,
++    source_authority_tier as source_authority_tier,
++    source_vertical_mismatch as source_vertical_mismatch,
++)
+diff -ru '--exclude=__pycache__' '--exclude=*.pyc' v7base/app/infrastructure/sources/openrouter_web_search.py v7work/app/infrastructure/sources/openrouter_web_search.py
+--- v7base/app/infrastructure/sources/openrouter_web_search.py	2026-04-27 11:28:16.000000000 +0000
++++ v7work/app/infrastructure/sources/openrouter_web_search.py	2026-04-27 18:32:51.196677175 +0000
+@@ -14,6 +14,7 @@
+ from app.schemas.sources import RawSourceItem
+ from app.search_v2 import build_search_plan, extract_html_metadata, article_confidence, candidate_quality, evaluate_candidate, FreshnessPolicy, candidate_age_hours
+ from app.search_v2.recorder import SearchRunRecorder, SearchRunRecord, decision_event_from_candidate
++from app.search_v2.source_quality import source_quality_weight, source_authority_tier
+ from app.shared.logging import get_logger
+ from app.shared.settings import get_settings
+ 
+@@ -78,7 +79,11 @@
+         self._model = model or settings.openrouter_search_model or settings.openrouter_default_model
+         self._timeout_seconds = timeout_seconds
+         self._max_results = max(settings.openrouter_web_search_max_results, 1)
+-        self._topic_budget_usd = max(settings.openrouter_topic_budget_usd, 0.0)
++        self._topic_budget_usd = max(settings.news_topic_hard_budget_usd, settings.openrouter_topic_budget_usd, 0.0)
++        self._soft_budget_usd = max(settings.news_topic_soft_budget_usd, 0.0)
++        self._reserved_llm_budget_usd = max(settings.openrouter_reserved_llm_budget_usd, 0.0)
++        self._normal_max_calls = max(settings.openrouter_web_search_normal_max_calls, 1)
++        self._rescue_max_calls = max(settings.openrouter_web_search_rescue_max_calls, self._normal_max_calls)
+         self._search_result_cost_usd = max(settings.openrouter_search_result_cost_usd, 0.0)
+         self._results_per_call = max(settings.openrouter_web_search_results_per_call, 1)
+         self._max_calls_per_topic = max(settings.openrouter_web_search_max_calls_per_topic, 1)
+@@ -117,7 +122,10 @@
+         plan = build_search_plan(query, from_dt=from_dt, to_dt=to_dt, first_run=(to_dt - from_dt) > timedelta(hours=60))
+         target_limit = max(1, min(limit, self._max_results))
+         results_per_call = max(1, min(self._results_per_call, target_limit))
+-        max_calls = self._allowed_search_calls(results_per_call)
++        hard_max_calls = self._allowed_search_calls(results_per_call, budget_usd=self._topic_budget_usd)
++        soft_max_calls = self._allowed_search_calls(results_per_call, budget_usd=self._soft_budget_usd)
++        max_calls = min(hard_max_calls, self._rescue_max_calls)
++        normal_calls = max(1, min(max_calls, soft_max_calls, self._normal_max_calls))
+         queries = plan.query_variants[:max_calls]
+         merged: list[RawSourceItem] = []
+         seen_urls: set[str] = set()
+@@ -132,7 +140,10 @@
+             target_limit=target_limit,
+             results_per_call=results_per_call,
+             max_calls=max_calls,
++            normal_calls=normal_calls,
+             budget_usd=self._topic_budget_usd,
++            soft_budget_usd=self._soft_budget_usd,
++            reserved_llm_budget_usd=self._reserved_llm_budget_usd,
+             query_variants=queries,
+         )
+ 
+@@ -151,7 +162,10 @@
+                 "target_limit": target_limit,
+                 "results_per_call": results_per_call,
+                 "max_calls": max_calls,
++                "normal_calls": normal_calls,
+                 "budget_usd": self._topic_budget_usd,
++                "soft_budget_usd": self._soft_budget_usd,
++                "reserved_llm_budget_usd": self._reserved_llm_budget_usd,
+                 "min_quality_candidates": self._min_quality_candidates,
+                 "allow_search_snippet_fallback": self._allow_search_snippet_fallback,
+                 "max_article_age_hours": self._max_article_age_hours,
+@@ -203,10 +217,15 @@
+             )
+             # Do not make the user press the button twice: keep going until we have
+             # a usable candidate pool, but stop early when the pool is already good.
+-            if pass_index >= min_passes and len(merged) >= adaptive_target:
+-                break
+             if len(merged) >= target_limit:
+                 break
++            if pass_index >= normal_calls:
++                # Rescue pass is allowed only when the normal budget did not produce
++                # enough usable candidates and the topic is not highly ambiguous.
++                if len(merged) >= adaptive_target:
++                    break
++                if plan.topic_kind in {"ambiguous_acronym", "ambiguous_geo"}:
++                    break
+ 
+         if len(merged) < min(self._min_quality_candidates, target_limit) and rescue_pool and self._allow_search_snippet_fallback:
+             rescue_items = await self._enrich_and_filter_recent(
+@@ -271,13 +290,14 @@
+                 logger.info("search_debug_dump_written", source=self.name, path=str(dump_path), run_id=record.run_id)
+         return []
+ 
+-    def _allowed_search_calls(self, results_per_call: int) -> int:
++    def _allowed_search_calls(self, results_per_call: int, *, budget_usd: float | None = None) -> int:
+         if self._search_result_cost_usd <= 0:
+             return self._max_calls_per_topic
++        usable_budget = max((self._topic_budget_usd if budget_usd is None else budget_usd) - self._reserved_llm_budget_usd, 0.0)
+         per_call_cost = results_per_call * self._search_result_cost_usd
+         if per_call_cost <= 0:
+             return self._max_calls_per_topic
+-        affordable = int(self._topic_budget_usd // per_call_cost)
++        affordable = int(usable_budget // per_call_cost)
+         return max(1, min(self._max_calls_per_topic, affordable))
+     @staticmethod
+     def _build_queries(query: str, from_dt: datetime, to_dt: datetime) -> list[str]:
+@@ -560,6 +580,7 @@
+                     policy=self._freshness_policy,
+                     search_annotation=bool(item.metadata.get("search_annotation")),
+                     search_snippet=bool(item.metadata.get("search_snippet")),
++                    source_name=item.source_name,
+                 )
+                 if not decision.usable:
+                     event = self._log_decision(plan, canonical_url, candidate_title, candidate_desc, decision, pass_index=pass_index, query_text=query_text)
+@@ -586,11 +607,13 @@
+                         "quality_reason": decision.reason,
+                         "published_at_source": decision.published_at_source,
+                         "freshness_verified": decision.freshness_verified,
++                        "source_weight": source_quality_weight(item.source_name, plan.topic_kind),
++                        "authority_tier": source_authority_tier(item.source_name, plan.topic_kind),
+                         "topic_kind": plan.topic_kind,
+                         **decision.metadata,
+                     },
+                 }))
+-        enriched.sort(key=lambda x: (int(x.metadata.get("candidate_status") == "accepted"), int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
++        enriched.sort(key=lambda x: (int(x.metadata.get("candidate_status") == "accepted"), float(x.metadata.get("source_weight", source_quality_weight(x.source_name, str(x.metadata.get("topic_kind", ""))))), int(x.metadata.get("directness_score", 0)), int(x.metadata.get("topic_match_score", 0)), x.published_at), reverse=True)
+         return enriched
+ 
+     def _fallback_candidate(
+@@ -627,6 +650,7 @@
+             policy=self._freshness_policy,
+             search_annotation=bool(item.metadata.get("search_annotation")) and (allow_search_snippet_fallback or self._allow_search_snippet_fallback),
+             search_snippet=bool(item.metadata.get("search_snippet")) and (allow_search_snippet_fallback or self._allow_search_snippet_fallback),
++            source_name=item.source_name,
+         )
+         if not decision.usable:
+             event = self._log_decision(plan, url, item.title, item.description, decision, prefix=f"fallback:{reason}", pass_index=pass_index, query_text=query_text)
+@@ -650,6 +674,8 @@
+                 "quality_reason": decision.reason,
+                 "published_at_source": decision.published_at_source,
+                 "freshness_verified": decision.freshness_verified,
++                "source_weight": source_quality_weight(item.source_name, plan.topic_kind),
++                "authority_tier": source_authority_tier(item.source_name, plan.topic_kind),
+                 "topic_kind": plan.topic_kind,
+                 **decision.metadata,
+             },
+@@ -748,6 +774,8 @@
+             pass_index=pass_index,
+             query=query_text,
+         )
++        event["source_weight"] = decision.metadata.get("source_weight")
++        event["authority_tier"] = decision.metadata.get("authority_tier")
+         if self._debug_rejections:
+             logger.info("candidate_decision", **event)
+         return event

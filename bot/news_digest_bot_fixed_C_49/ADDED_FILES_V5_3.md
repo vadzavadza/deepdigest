@@ -1,0 +1,12 @@
+# Added files in v5.3
+
+- tests/test_quality_engine_v53.py
+- QUALITY_ENGINE_V5_3_SINGLE_RUN_RU.md
+- START_HERE_V5_3_RU.md
+- TEST_REPORT_V5_3.md
+- PATCH_V5_2_TO_V5_3.diff
+- MANIFEST_V5_2_BEFORE_V5_3.txt
+- MANIFEST_V5_3_AFTER.txt
+- CHANGED_FILES_V5_3.md
+- ADDED_FILES_V5_3.md
+- REMOVED_FILES_V5_3.md
